@@ -1,0 +1,22 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+remappings = [
+    "provider-contracts/=./",
+]
+solc_version = "0.8.34"
+memory_limit = 43554432
+gas_limit = 9223372036854775807
+gas_price = 0
+optimizer = true
+optimizer_runs = 10000
+via_ir = true
+
+[rpc_endpoints]
+sepolia = "https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}"
+mainnet = "https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}"
+
+[etherscan]
+sepolia = { key = "${ETHERSCAN_API_KEY}" }
+mainnet = { key = "${ETHERSCAN_API_KEY}" }
