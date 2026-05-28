@@ -10,14 +10,6 @@ import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Address} from "openzeppelin-contracts/contracts/utils/Address.sol";
 import {Math} from "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import {
-    PoolKey as V4PoolKey,
-    PathKey,
-    IPoolManager,
-    PoolStateLibrary,
-    PoolId,
-    PoolIdLibrary
-} from "provider-contracts/src/libs/uniswap/v4/Uniswap.sol";
-import {
     Path,
     IUniswapV3Factory,
     IUniswapV3Pool,
@@ -28,16 +20,12 @@ import {INonfungiblePositionManager} from "provider-contracts/src/libs/uniswap/v
 contract TestUniswapProviderFork is Test {
     using SafeERC20 for IERC20;
     using Address for address;
-    using PoolStateLibrary for IPoolManager;
-    using PoolIdLibrary for V4PoolKey;
     using Path for bytes;
 
     UniswapV3Provider public v3Provider;
-    IPoolManager public poolManager;
 
     function setUp() public {
         vm.createSelectFork("mainnet");
-        poolManager = IPoolManager(mainnet.POOL_MANAGER);
 
         v3Provider = new UniswapV3Provider(mainnet.UNISWAP_V3_ROUTER, mainnet.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER);
         v3Provider.initialize(address(this));

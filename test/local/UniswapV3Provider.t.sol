@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
+import "forge-std/console.sol";
 import {Test} from "forge-std/Test.sol";
 import {UniswapV3Provider} from "provider-contracts/src/providers/UniswapV3Provider.sol";
 import {INonfungiblePositionManager} from "provider-contracts/src/libs/uniswap/v3/Uniswap.sol";
