@@ -5,6 +5,7 @@ import {IProvider} from "./IProvider.sol";
 
 error UnstakeMoreThanStaked();
 error InvalidAsset();
+error ClaimUnstakedNotSupported();
 
 /**
  * @title IStakingProvider

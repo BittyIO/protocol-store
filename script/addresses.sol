@@ -16,6 +16,11 @@ library mainnet {
 
     address public constant STETH = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
     address public constant UNSTETH = 0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1;
+
+    // Sky Protocol
+    address public constant USDS = 0xdC035D45d973E3EC169d2276DDab16f1e407384F;
+    address public constant S_USDS = 0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD;
+    address public constant SKY_PSM = 0xA188EEC8F81263234dA3622A406892F3D630f98c;
 }
 
 /// @dev Sepolia addresses parallel to `mainnet` for fork tests on Sepolia.
@@ -29,6 +34,8 @@ library sepolia {
 
     address public constant AAVE_V3 = 0x012bAC54348C0E635dCAc9D5FB99f06F24136C9A;
     address public constant POOL_DATA_PROVIDER = 0x3e9708d80f7B3e43118013075F7e95CE3AB31F31;
+    /// @dev Aave V3 Sepolia uses its own WETH9Mock — not the canonical Sepolia WETH.
+    address public constant AAVE_WETH = 0xC558DBdd856501FCd9aaF1E62eae57A9F0629a3c;
 
     address public constant POOL_MANAGER = 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543;
     address public constant UNISWAP_V3_ROUTER = 0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E;
