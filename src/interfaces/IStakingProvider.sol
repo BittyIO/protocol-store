@@ -38,14 +38,18 @@ interface IStakingProvider is IProvider {
 
     /**
      * @notice Get the unstake request ids.
-     * @dev Get the unstake request ids.
+     * @dev Get the unstake request ids, some staking providers.  
+     * Some protocols for ETH staking need to wait a period of time before the unstake request is finalized.
+     * Some protocols for StableCoin staking do not need this.
      * @return The unstake request ids.
      */
     function getUnstakeRequestIds() external view returns (uint256[] memory);
 
     /**
-     * @notice Claim the asset from the staking provider.
-     * @dev Claim the asset from the staking provider.
+     * @notice Claim the unstaked asset from the staking provider.
+     * @dev Claim the unstaked asset from the staking provider.
+     * Some protocols for ETH staking need to wait a period of time before the unstake request is finalized.
+     * Some protocols for StableCoin staking do not need this.
      * @param requestIds The request ids to claim.
      */
     function claimUnstaked(uint256[] memory requestIds) external;
