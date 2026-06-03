@@ -3,13 +3,13 @@ pragma solidity ^0.8.34;
 
 import "forge-std/console.sol";
 import {Test} from "forge-std/Test.sol";
-import {LidoV2Provider} from "provider-contracts/src/providers/LidoV2Provider.sol";
+import {LidoV2Protocol} from "protocol-contracts/src/protocols/LidoV2Protocol.sol";
 import {mainnet} from "../../../script/addresses.sol";
-import {IStETH, IUnstETH} from "provider-contracts/src/libs/lido/v2/Lido.sol";
+import {IStETH, IUnstETH} from "protocol-contracts/src/libs/lido/v2/Lido.sol";
 import {WETH} from "solmate/tokens/WETH.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Address} from "openzeppelin-contracts/contracts/utils/Address.sol";
-import {WETHBalanceNotEnough} from "provider-contracts/src/providers/LidoV2Provider.sol";
+import {WETHBalanceNotEnough} from "protocol-contracts/src/protocols/LidoV2Protocol.sol";
 
 /// @dev Simulates Lido's unstETH: marks all requests as finalized and sends ETH on claimWithdrawal
 contract MockUnstETHSendsEth {
@@ -45,42 +45,42 @@ contract MockUnstETHSendsEth {
     receive() external payable {}
 }
 
-contract TestLidoProviderFork is Test {
+contract TestLidoProtocolFork is Test {
     using Address for address;
 
-    LidoV2Provider public lidoProvider;
+    LidoV2Protocol public lidoProtocol;
     IStETH public stETH;
     IUnstETH public unstETH;
     WETH public weth;
 
     function setUp() public {
         vm.createSelectFork("mainnet");
-        lidoProvider = new LidoV2Provider(mainnet.STETH, mainnet.UNSTETH, mainnet.WETH);
-        lidoProvider.initialize(address(this));
+        lidoProtocol = new LidoV2Protocol(mainnet.STETH, mainnet.UNSTETH, mainnet.WETH);
+        lidoProtocol.initialize(address(this));
         stETH = IStETH(mainnet.STETH);
         unstETH = IUnstETH(mainnet.UNSTETH);
         weth = WETH(payable(mainnet.WETH));
     }
 
     function test_Initialize() public view {
-        assertEq(lidoProvider.owner(), address(this));
+        assertEq(lidoProtocol.owner(), address(this));
     }
 
     function test_InitializeRevertWhenCalledTwice() public {
-        LidoV2Provider newProvider = new LidoV2Provider(mainnet.STETH, mainnet.UNSTETH, mainnet.WETH);
-        newProvider.initialize(address(this));
+        LidoV2Protocol newProtocol = new LidoV2Protocol(mainnet.STETH, mainnet.UNSTETH, mainnet.WETH);
+        newProtocol.initialize(address(this));
         vm.expectRevert();
-        newProvider.initialize(address(1));
+        newProtocol.initialize(address(1));
     }
 
     function test_Stake() public {
         uint256 stakeAmount = 1 ether;
         deal(address(weth), address(this), stakeAmount);
-        weth.approve(address(lidoProvider), stakeAmount);
+        weth.approve(address(lidoProtocol), stakeAmount);
 
-        uint256 balanceBefore = stETH.balanceOf(address(lidoProvider));
-        lidoProvider.stake(address(weth), stakeAmount);
-        uint256 balanceAfter = stETH.balanceOf(address(lidoProvider));
+        uint256 balanceBefore = stETH.balanceOf(address(lidoProtocol));
+        lidoProtocol.stake(address(weth), stakeAmount);
+        uint256 balanceAfter = stETH.balanceOf(address(lidoProtocol));
         assertGt(balanceAfter, balanceBefore);
         assertApproxEqAbs(balanceAfter - balanceBefore, stakeAmount, 10);
     }
@@ -88,38 +88,38 @@ contract TestLidoProviderFork is Test {
     function test_StakeRevertWhenWETHBalanceNotEnough() public {
         uint256 stakeAmount = 1 ether;
         deal(address(weth), address(this), stakeAmount);
-        weth.approve(address(lidoProvider), stakeAmount);
+        weth.approve(address(lidoProtocol), stakeAmount);
         vm.expectRevert(WETHBalanceNotEnough.selector);
-        lidoProvider.stake(address(weth), stakeAmount + 1 ether);
+        lidoProtocol.stake(address(weth), stakeAmount + 1 ether);
     }
 
     function test_Unstake_ResetsApprovalToZero() public {
         uint256 stakeAmount = 1 ether;
         deal(address(weth), address(this), stakeAmount);
-        weth.approve(address(lidoProvider), stakeAmount);
-        lidoProvider.stake(address(weth), stakeAmount);
+        weth.approve(address(lidoProtocol), stakeAmount);
+        lidoProtocol.stake(address(weth), stakeAmount);
 
-        uint256 unstakeAmount = stETH.balanceOf(address(lidoProvider));
-        lidoProvider.unstake(address(weth), unstakeAmount);
+        uint256 unstakeAmount = stETH.balanceOf(address(lidoProtocol));
+        lidoProtocol.unstake(address(weth), unstakeAmount);
 
-        uint256 remaining = IERC20(address(stETH)).allowance(address(lidoProvider), address(unstETH));
+        uint256 remaining = IERC20(address(stETH)).allowance(address(lidoProtocol), address(unstETH));
         assertEq(remaining, 0, "approval to unstETH must be 0 after unstake");
     }
 
     function test_Claim_ReturnWETHToVault() public {
         uint256 claimAmount = 1 ether;
         MockUnstETHSendsEth mockUnstETH = new MockUnstETHSendsEth{value: claimAmount}(claimAmount);
-        LidoV2Provider provider = new LidoV2Provider(mainnet.STETH, address(mockUnstETH), mainnet.WETH);
-        provider.initialize(address(this));
+        LidoV2Protocol protocol = new LidoV2Protocol(mainnet.STETH, address(mockUnstETH), mainnet.WETH);
+        protocol.initialize(address(this));
 
         uint256 wethBefore = weth.balanceOf(address(this));
 
         uint256[] memory requestIds = new uint256[](1);
         requestIds[0] = 1;
-        provider.claimUnstaked(requestIds);
+        protocol.claimUnstaked(requestIds);
 
-        assertEq(address(provider).balance, 0, "provider should have 0 ETH after claim");
-        assertEq(IERC20(mainnet.WETH).balanceOf(address(provider)), 0, "provider should have 0 WETH after claim");
+        assertEq(address(protocol).balance, 0, "protocol should have 0 ETH after claim");
+        assertEq(IERC20(mainnet.WETH).balanceOf(address(protocol)), 0, "protocol should have 0 WETH after claim");
         assertEq(
             IERC20(mainnet.WETH).balanceOf(address(this)),
             wethBefore + claimAmount,
@@ -132,8 +132,8 @@ contract TestLidoProviderFork is Test {
         uint256 numRequests = 3;
         uint256 totalEth = ethPerClaim * numRequests;
         MockUnstETHSendsEth mockUnstETH = new MockUnstETHSendsEth{value: totalEth}(ethPerClaim);
-        LidoV2Provider provider = new LidoV2Provider(mainnet.STETH, address(mockUnstETH), mainnet.WETH);
-        provider.initialize(address(this));
+        LidoV2Protocol protocol = new LidoV2Protocol(mainnet.STETH, address(mockUnstETH), mainnet.WETH);
+        protocol.initialize(address(this));
 
         uint256 wethBefore = weth.balanceOf(address(this));
 
@@ -141,10 +141,10 @@ contract TestLidoProviderFork is Test {
         for (uint256 i = 0; i < numRequests; i++) {
             requestIds[i] = i + 1;
         }
-        provider.claimUnstaked(requestIds);
+        protocol.claimUnstaked(requestIds);
 
-        assertEq(address(provider).balance, 0, "provider should have 0 ETH after claim");
-        assertEq(IERC20(mainnet.WETH).balanceOf(address(provider)), 0, "provider should have 0 WETH after claim");
+        assertEq(address(protocol).balance, 0, "protocol should have 0 ETH after claim");
+        assertEq(IERC20(mainnet.WETH).balanceOf(address(protocol)), 0, "protocol should have 0 WETH after claim");
         assertEq(
             IERC20(mainnet.WETH).balanceOf(address(this)),
             wethBefore + totalEth,
@@ -153,7 +153,7 @@ contract TestLidoProviderFork is Test {
     }
 
     function test_Claim_emptyUnstakeRequests_doesNotRevert() public {
-        lidoProvider.claimUnstaked(new uint256[](0));
+        lidoProtocol.claimUnstaked(new uint256[](0));
     }
 
     function test_Claim_multipleRequests_allClaimedAndRemoved() public {
@@ -164,14 +164,14 @@ contract TestLidoProviderFork is Test {
         // withdrawals transfers shares out and can leave slightly less than requested
         uint256 totalStake = amountPerRequest * numRequests * 2;
         deal(address(weth), address(this), totalStake);
-        weth.approve(address(lidoProvider), totalStake);
-        lidoProvider.stake(address(weth), totalStake);
+        weth.approve(address(lidoProtocol), totalStake);
+        lidoProtocol.stake(address(weth), totalStake);
 
         for (uint256 i = 0; i < numRequests; i++) {
-            lidoProvider.unstake(address(weth), amountPerRequest);
+            lidoProtocol.unstake(address(weth), amountPerRequest);
         }
 
-        uint256[] memory ids = lidoProvider.getUnstakeRequestIds();
+        uint256[] memory ids = lidoProtocol.getUnstakeRequestIds();
         assertEq(ids.length, numRequests, "all unstake requests should be tracked");
 
         for (uint256 i = 0; i < ids.length; i++) {
@@ -184,7 +184,7 @@ contract TestLidoProviderFork is Test {
             statuses[0] = IUnstETH.WithdrawalRequestStatus({
                 amountOfStETH: amountPerRequest,
                 amountOfShares: 0,
-                owner: address(lidoProvider),
+                owner: address(lidoProtocol),
                 timestamp: block.timestamp,
                 isFinalized: true,
                 isClaimed: false
@@ -198,10 +198,10 @@ contract TestLidoProviderFork is Test {
 
             vm.mockCall(address(unstETH), abi.encodeWithSelector(IUnstETH.claimWithdrawal.selector, id), "");
         }
-        uint256[] memory requestIds = lidoProvider.getUnstakeRequestIds();
-        lidoProvider.claimUnstaked(requestIds);
+        uint256[] memory requestIds = lidoProtocol.getUnstakeRequestIds();
+        lidoProtocol.claimUnstaked(requestIds);
 
-        uint256[] memory remaining = lidoProvider.getUnstakeRequestIds();
+        uint256[] memory remaining = lidoProtocol.getUnstakeRequestIds();
         assertEq(remaining.length, 0, "all claimable requests must be removed");
     }
 }

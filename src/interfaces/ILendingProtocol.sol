@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IProvider} from "./IProvider.sol";
+import {IProtocol} from "./IProtocol.sol";
 
-interface ILendingProvider is IProvider {
+interface ILendingProtocol is IProtocol {
     /**
-     * @notice Supply the asset to the lending provider.
-     * @dev Supply the asset to the lending provider.
+     * @notice Supply the asset to the lending protocol.
+     * @dev Supply the asset to the lending protocol.
      * @param asset The address of the asset.
      * @param amount The amount of the asset.
      */
     function supply(address asset, uint256 amount) external payable;
 
     /**
-     * @notice Withdraw the asset from the lending provider.
-     * @dev Withdraw the asset from the lending provider.
+     * @notice Withdraw the asset from the lending protocol.
+     * @dev Withdraw the asset from the lending protocol.
      * @param asset The address of the asset.
      * @param amount The amount of the asset.
      */

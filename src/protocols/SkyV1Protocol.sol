@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IStakingProvider, InvalidAsset, ClaimUnstakedNotSupported} from "../interfaces/IStakingProvider.sol";
+import {IStakingProtocol, InvalidAsset, ClaimUnstakedNotSupported} from "../interfaces/IStakingProtocol.sol";
 import {IDssPsm, ISUsds} from "../libs/sky/Sky.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
-contract SkyV1Provider is IStakingProvider, Ownable, Initializable {
+contract SkyV1Protocol is IStakingProtocol, Ownable, Initializable {
     using SafeERC20 for IERC20;
 
     // USDC is 6 decimals, USDS is 18 decimals → multiply by 1e12 to convert

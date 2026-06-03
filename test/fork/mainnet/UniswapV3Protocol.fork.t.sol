@@ -3,7 +3,7 @@ pragma solidity ^0.8.34;
 
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {UniswapV3Provider} from "provider-contracts/src/providers/UniswapV3Provider.sol";
+import {UniswapV3Protocol} from "protocol-contracts/src/protocols/UniswapV3Protocol.sol";
 import {mainnet} from "../../../script/addresses.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
@@ -14,22 +14,22 @@ import {
     IUniswapV3Factory,
     IUniswapV3Pool,
     IUniswapV3Router
-} from "provider-contracts/src/libs/uniswap/v3/Uniswap.sol";
-import {INonfungiblePositionManager} from "provider-contracts/src/libs/uniswap/v3/Uniswap.sol";
+} from "protocol-contracts/src/libs/uniswap/v3/Uniswap.sol";
+import {INonfungiblePositionManager} from "protocol-contracts/src/libs/uniswap/v3/Uniswap.sol";
 
-contract TestUniswapProviderFork is Test {
+contract TestUniswapProtocolFork is Test {
     using SafeERC20 for IERC20;
     using Address for address;
     using Path for bytes;
 
-    UniswapV3Provider public v3Provider;
+    UniswapV3Protocol public v3Protocol;
 
     function setUp() public {
         vm.createSelectFork("mainnet");
 
-        v3Provider = new UniswapV3Provider(mainnet.UNISWAP_V3_ROUTER, mainnet.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER);
-        v3Provider.initialize(address(this));
-        vm.deal(address(v3Provider), 0);
+        v3Protocol = new UniswapV3Protocol(mainnet.UNISWAP_V3_ROUTER, mainnet.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER);
+        v3Protocol.initialize(address(this));
+        vm.deal(address(v3Protocol), 0);
     }
 
     function _getV3PoolPrice(address tokenIn, address tokenOut, uint24 fee) internal view returns (uint256) {
@@ -58,7 +58,7 @@ contract TestUniswapProviderFork is Test {
         }
     }
 
-    // ============ Uniswap V3 Provider Tests ============
+    // ============ Uniswap V3 Protocol Tests ============
 
     function test_V3_SwapWETHToUSDT() public {
         address[] memory path = new address[](2);
@@ -78,9 +78,9 @@ contract TestUniswapProviderFork is Test {
 
         uint256 usdtBalanceBefore = IERC20(address(mainnet.USDT)).balanceOf(address(this));
         deal(address(mainnet.WETH), address(this), sellAmount);
-        IERC20(address(mainnet.WETH)).safeApprove(address(v3Provider), sellAmount);
+        IERC20(address(mainnet.WETH)).safeApprove(address(v3Protocol), sellAmount);
 
-        v3Provider.swap(swapData);
+        v3Protocol.swap(swapData);
 
         uint256 usdtBalanceAfter = IERC20(address(mainnet.USDT)).balanceOf(address(this));
         assertGt(usdtBalanceAfter, usdtBalanceBefore);
@@ -106,9 +106,9 @@ contract TestUniswapProviderFork is Test {
 
         uint256 wethBalanceBefore = IERC20(address(mainnet.WETH)).balanceOf(address(this));
         deal(address(mainnet.USDC), address(this), sellAmount);
-        IERC20(address(mainnet.USDC)).safeApprove(address(v3Provider), sellAmount);
+        IERC20(address(mainnet.USDC)).safeApprove(address(v3Protocol), sellAmount);
 
-        v3Provider.swap(swapData);
+        v3Protocol.swap(swapData);
 
         uint256 wethBalanceAfter = IERC20(address(mainnet.WETH)).balanceOf(address(this));
         assertGt(wethBalanceAfter, wethBalanceBefore);
@@ -134,9 +134,9 @@ contract TestUniswapProviderFork is Test {
 
         uint256 wethBalanceBefore = IERC20(address(mainnet.WETH)).balanceOf(address(this));
         deal(address(mainnet.USDT), address(this), sellAmount);
-        IERC20(address(mainnet.USDT)).safeApprove(address(v3Provider), sellAmount);
+        IERC20(address(mainnet.USDT)).safeApprove(address(v3Protocol), sellAmount);
 
-        v3Provider.swap(swapData);
+        v3Protocol.swap(swapData);
 
         uint256 wethBalanceAfter = IERC20(address(mainnet.WETH)).balanceOf(address(this));
         assertGt(wethBalanceAfter, wethBalanceBefore);
@@ -169,9 +169,9 @@ contract TestUniswapProviderFork is Test {
 
         uint256 usdtBalanceBefore = IERC20(address(mainnet.USDT)).balanceOf(address(this));
         deal(address(mainnet.USDC), address(this), sellAmount);
-        IERC20(address(mainnet.USDC)).safeApprove(address(v3Provider), sellAmount);
+        IERC20(address(mainnet.USDC)).safeApprove(address(v3Protocol), sellAmount);
 
-        v3Provider.swap(swapData);
+        v3Protocol.swap(swapData);
 
         uint256 usdtBalanceAfter = IERC20(address(mainnet.USDT)).balanceOf(address(this));
         assertGt(usdtBalanceAfter, usdtBalanceBefore);
@@ -199,8 +199,8 @@ contract TestUniswapProviderFork is Test {
 
         deal(token0, address(this), amount0Desired);
         deal(token1, address(this), amount1Desired);
-        IERC20(token0).safeApprove(address(v3Provider), amount0Desired);
-        IERC20(token1).safeApprove(address(v3Provider), amount1Desired);
+        IERC20(token0).safeApprove(address(v3Protocol), amount0Desired);
+        IERC20(token1).safeApprove(address(v3Protocol), amount1Desired);
 
         INonfungiblePositionManager.MintParams memory mintParams = INonfungiblePositionManager.MintParams({
             token0: token0,
@@ -218,11 +218,11 @@ contract TestUniswapProviderFork is Test {
         bytes memory addData = abi.encode(true, abi.encode(mintParams));
 
         vm.recordLogs();
-        v3Provider.addLiquidity(addData);
+        v3Protocol.addLiquidity(addData);
 
         Vm.Log[] memory entries = vm.getRecordedLogs();
         address npm = mainnet.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER;
-        bytes32 toTopic = bytes32(uint256(uint160(address(v3Provider))));
+        bytes32 toTopic = bytes32(uint256(uint160(address(v3Protocol))));
         for (uint256 i = 0; i < entries.length; i++) {
             if (
                 entries[i].emitter == npm && entries[i].topics[0] == ERC721_TRANSFER_TOPIC
@@ -241,26 +241,26 @@ contract TestUniswapProviderFork is Test {
         uint256 tokenId = _mintV3PositionAndGetTokenId();
         assertGt(tokenId, 0, "tokenId from mint");
 
-        uint256 liquidity = v3Provider.getLiquidity(abi.encode(tokenId));
+        uint256 liquidity = v3Protocol.getLiquidity(abi.encode(tokenId));
         assertGt(liquidity, 0, "liquidity after mint");
     }
 
     function test_V3_GetLiquidity_ClaimFees() public {
         uint256 tokenId = _mintV3PositionAndGetTokenId();
 
-        uint256 liquidity = v3Provider.getLiquidity(abi.encode(tokenId));
+        uint256 liquidity = v3Protocol.getLiquidity(abi.encode(tokenId));
         assertGt(liquidity, 0, "liquidity after mint");
 
         INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
             tokenId: tokenId, recipient: address(this), amount0Max: type(uint128).max, amount1Max: type(uint128).max
         });
-        v3Provider.claimAMMFees(abi.encode(collectParams));
+        v3Protocol.claimAMMFees(abi.encode(collectParams));
     }
 
-    /// @notice `CollectParams.recipient` in calldata must be ignored; fees go to the provider owner only.
+    /// @notice `CollectParams.recipient` in calldata must be ignored; fees go to the protocol owner only.
     function test_V3_ClaimFees_EncodedRecipientDoesNotReceiveTokens() public {
         uint256 tokenId = _mintV3PositionAndGetTokenId();
-        assertGt(v3Provider.getLiquidity(abi.encode(tokenId)), 0, "liquidity after mint");
+        assertGt(v3Protocol.getLiquidity(abi.encode(tokenId)), 0, "liquidity after mint");
 
         address token0 = mainnet.WETH < mainnet.USDC ? mainnet.WETH : mainnet.USDC;
         address token1 = mainnet.WETH < mainnet.USDC ? mainnet.USDC : mainnet.WETH;
@@ -272,7 +272,7 @@ contract TestUniswapProviderFork is Test {
         INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
             tokenId: tokenId, recipient: encodedRecipient, amount0Max: type(uint128).max, amount1Max: type(uint128).max
         });
-        v3Provider.claimAMMFees(abi.encode(collectParams));
+        v3Protocol.claimAMMFees(abi.encode(collectParams));
 
         assertEq(IERC20(token0).balanceOf(encodedRecipient), bal0Before, "token0 must not go to encoded recipient");
         assertEq(IERC20(token1).balanceOf(encodedRecipient), bal1Before, "token1 must not go to encoded recipient");
@@ -281,7 +281,7 @@ contract TestUniswapProviderFork is Test {
     function test_V3_RemoveLiquidity() public {
         uint256 tokenId = _mintV3PositionAndGetTokenId();
 
-        uint256 liquidityAfterMint = v3Provider.getLiquidity(abi.encode(tokenId));
+        uint256 liquidityAfterMint = v3Protocol.getLiquidity(abi.encode(tokenId));
         assertGt(liquidityAfterMint, 0, "liquidity after mint");
 
         uint128 liquidityToDecrease =
@@ -294,15 +294,15 @@ contract TestUniswapProviderFork is Test {
                 amount1Min: 0,
                 deadline: block.timestamp
             });
-        v3Provider.removeLiquidity(abi.encode(decreaseParams));
+        v3Protocol.removeLiquidity(abi.encode(decreaseParams));
 
-        uint256 liquidityAfterDecrease = v3Provider.getLiquidity(abi.encode(tokenId));
+        uint256 liquidityAfterDecrease = v3Protocol.getLiquidity(abi.encode(tokenId));
         assertEq(liquidityAfterDecrease, liquidityAfterMint - liquidityToDecrease, "liquidity after decrease");
 
         INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
             tokenId: tokenId, recipient: address(this), amount0Max: type(uint128).max, amount1Max: type(uint128).max
         });
-        v3Provider.claimAMMFees(abi.encode(collectParams));
+        v3Protocol.claimAMMFees(abi.encode(collectParams));
 
         address token0 = mainnet.WETH < mainnet.USDC ? mainnet.WETH : mainnet.USDC;
         address token1 = mainnet.WETH < mainnet.USDC ? mainnet.USDC : mainnet.WETH;
@@ -317,7 +317,7 @@ contract TestUniswapProviderFork is Test {
         address token0 = mainnet.WETH < mainnet.USDC ? mainnet.WETH : mainnet.USDC;
         address token1 = mainnet.WETH < mainnet.USDC ? mainnet.USDC : mainnet.WETH;
 
-        uint128 liquidity = uint128(v3Provider.getLiquidity(abi.encode(tokenId)));
+        uint128 liquidity = uint128(v3Protocol.getLiquidity(abi.encode(tokenId)));
         assertGt(liquidity, 0, "liquidity before remove");
 
         uint256 balance0Before = IERC20(token0).balanceOf(address(this));
@@ -328,7 +328,7 @@ contract TestUniswapProviderFork is Test {
                 tokenId: tokenId, liquidity: liquidity, amount0Min: 0, amount1Min: 0, deadline: block.timestamp
             });
 
-        v3Provider.removeLiquidity(abi.encode(decreaseParams));
+        v3Protocol.removeLiquidity(abi.encode(decreaseParams));
 
         uint256 balance0After = IERC20(token0).balanceOf(address(this));
         uint256 balance1After = IERC20(token1).balanceOf(address(this));
@@ -336,9 +336,9 @@ contract TestUniswapProviderFork is Test {
         assertTrue(
             balance0After > balance0Before || balance1After > balance1Before, "tokens must arrive without claimAMMFees"
         );
-        assertEq(IERC20(token0).balanceOf(address(v3Provider)), 0, "provider must hold no token0");
-        assertEq(IERC20(token1).balanceOf(address(v3Provider)), 0, "provider must hold no token1");
-        assertEq(v3Provider.getLiquidity(abi.encode(tokenId)), 0, "liquidity must be zero after full removal");
+        assertEq(IERC20(token0).balanceOf(address(v3Protocol)), 0, "protocol must hold no token0");
+        assertEq(IERC20(token1).balanceOf(address(v3Protocol)), 0, "protocol must hold no token1");
+        assertEq(v3Protocol.getLiquidity(abi.encode(tokenId)), 0, "liquidity must be zero after full removal");
     }
 
     function test_V3_AddLiquidity_Mint_ReturnsUnusedTokens() public {
@@ -358,8 +358,8 @@ contract TestUniswapProviderFork is Test {
 
         deal(token0, address(this), amount0Desired);
         deal(token1, address(this), amount1Desired);
-        IERC20(token0).safeApprove(address(v3Provider), amount0Desired);
-        IERC20(token1).safeApprove(address(v3Provider), amount1Desired);
+        IERC20(token0).safeApprove(address(v3Protocol), amount0Desired);
+        IERC20(token1).safeApprove(address(v3Protocol), amount1Desired);
 
         uint256 balance0Before = IERC20(token0).balanceOf(address(this));
         uint256 balance1Before = IERC20(token1).balanceOf(address(this));
@@ -377,7 +377,7 @@ contract TestUniswapProviderFork is Test {
             recipient: address(0),
             deadline: block.timestamp
         });
-        v3Provider.addLiquidity(abi.encode(true, abi.encode(mintParams)));
+        v3Protocol.addLiquidity(abi.encode(true, abi.encode(mintParams)));
 
         uint256 balance0After = IERC20(token0).balanceOf(address(this));
         uint256 balance1After = IERC20(token1).balanceOf(address(this));
@@ -387,8 +387,8 @@ contract TestUniswapProviderFork is Test {
         assertLe(used0, amount0Desired, "used0 exceeds desired");
         assertLe(used1, amount1Desired, "used1 exceeds desired");
         assertTrue(used0 < amount0Desired || used1 < amount1Desired, "at least one token should have leftover");
-        assertEq(IERC20(token0).balanceOf(address(v3Provider)), 0, "provider clone must hold no token0");
-        assertEq(IERC20(token1).balanceOf(address(v3Provider)), 0, "provider clone must hold no token1");
+        assertEq(IERC20(token0).balanceOf(address(v3Protocol)), 0, "protocol clone must hold no token0");
+        assertEq(IERC20(token1).balanceOf(address(v3Protocol)), 0, "protocol clone must hold no token1");
     }
 
     function test_V3_AddLiquidity_IncreaseLiquidity_ReturnsUnusedTokens() public {
@@ -402,8 +402,8 @@ contract TestUniswapProviderFork is Test {
 
         deal(token0, address(this), amount0Desired);
         deal(token1, address(this), amount1Desired);
-        IERC20(token0).safeApprove(address(v3Provider), amount0Desired);
-        IERC20(token1).safeApprove(address(v3Provider), amount1Desired);
+        IERC20(token0).safeApprove(address(v3Protocol), amount0Desired);
+        IERC20(token1).safeApprove(address(v3Protocol), amount1Desired);
 
         uint256 balance0Before = IERC20(token0).balanceOf(address(this));
         uint256 balance1Before = IERC20(token1).balanceOf(address(this));
@@ -417,7 +417,7 @@ contract TestUniswapProviderFork is Test {
                 amount1Min: 0,
                 deadline: block.timestamp
             });
-        v3Provider.addLiquidity(abi.encode(false, abi.encode(increaseParams)));
+        v3Protocol.addLiquidity(abi.encode(false, abi.encode(increaseParams)));
 
         uint256 balance0After = IERC20(token0).balanceOf(address(this));
         uint256 balance1After = IERC20(token1).balanceOf(address(this));
@@ -427,8 +427,8 @@ contract TestUniswapProviderFork is Test {
         assertLe(used0, amount0Desired, "used0 exceeds desired");
         assertLe(used1, amount1Desired, "used1 exceeds desired");
         assertTrue(used0 < amount0Desired || used1 < amount1Desired, "at least one token should have leftover");
-        assertEq(IERC20(token0).balanceOf(address(v3Provider)), 0, "provider clone must hold no token0");
-        assertEq(IERC20(token1).balanceOf(address(v3Provider)), 0, "provider clone must hold no token1");
+        assertEq(IERC20(token0).balanceOf(address(v3Protocol)), 0, "protocol clone must hold no token0");
+        assertEq(IERC20(token1).balanceOf(address(v3Protocol)), 0, "protocol clone must hold no token1");
     }
 
     receive() external payable {}

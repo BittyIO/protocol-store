@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IProvider} from "./IProvider.sol";
+import {IProtocol} from "./IProtocol.sol";
 
 error UnstakeMoreThanStaked();
 error InvalidAsset();
 error ClaimUnstakedNotSupported();
 
 /**
- * @title IStakingProvider
- * @notice Interface for staking providers.
+ * @title IStakingProtocol
+ * @notice Interface for staking protocols.
  * @dev This interface is used to stake and unstake the asset.
  */
-interface IStakingProvider is IProvider {
+interface IStakingProtocol is IProtocol {
     /**
-     * @notice Stake the asset to the staking provider.
-     * @dev Stake the asset to the staking provider.
+     * @notice Stake the asset to the staking protocol.
+     * @dev Stake the asset to the staking protocol.
      * @param asset The address of the asset.
      * @param amount The amount of the asset.
      */
@@ -30,8 +30,8 @@ interface IStakingProvider is IProvider {
     function getStakedBalance(address asset) external view returns (uint256);
 
     /**
-     * @notice Unstake the asset from the staking provider.
-     * @dev Unstake the asset from the staking provider.
+     * @notice Unstake the asset from the staking protocol.
+     * @dev Unstake the asset from the staking protocol.
      * @param asset The address of the asset.
      * @param amount The amount of the asset.
      */
@@ -39,7 +39,7 @@ interface IStakingProvider is IProvider {
 
     /**
      * @notice Get the unstake request ids.
-     * @dev Get the unstake request ids, some staking providers.  
+     * @dev Get the unstake request ids, some staking protocols.  
      * Some protocols for ETH staking need to wait a period of time before the unstake request is finalized.
      * Some protocols for StableCoin staking do not need this.
      * @return The unstake request ids.
@@ -47,8 +47,8 @@ interface IStakingProvider is IProvider {
     function getUnstakeRequestIds() external view returns (uint256[] memory);
 
     /**
-     * @notice Claim the unstaked asset from the staking provider.
-     * @dev Claim the unstaked asset from the staking provider.
+     * @notice Claim the unstaked asset from the staking protocol.
+     * @dev Claim the unstaked asset from the staking protocol.
      * Some protocols for ETH staking need to wait a period of time before the unstake request is finalized.
      * Some protocols for StableCoin staking do not need this.
      * @param requestIds The request ids to claim.

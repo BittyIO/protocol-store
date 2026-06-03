@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IStakingProvider, UnstakeMoreThanStaked, InvalidAsset} from "../interfaces/IStakingProvider.sol";
+import {IStakingProtocol, UnstakeMoreThanStaked, InvalidAsset} from "../interfaces/IStakingProtocol.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
@@ -12,7 +12,7 @@ import {EnumerableSet} from "openzeppelin-contracts/contracts/utils/structs/Enum
 
 error WETHBalanceNotEnough();
 
-contract LidoV2Provider is IStakingProvider, Ownable, Initializable {
+contract LidoV2Protocol is IStakingProtocol, Ownable, Initializable {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.UintSet;
     EnumerableSet.UintSet private _unstakeRequests;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IAMMProvider} from "../interfaces/IAMMProvider.sol";
+import {IAMMProtocol} from "../interfaces/IAMMProtocol.sol";
 import {IUniswapV3Router, INonfungiblePositionManager} from "../libs/uniswap/v3/Uniswap.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -9,7 +9,7 @@ import {Address} from "openzeppelin-contracts/contracts/utils/Address.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
-contract UniswapV3Provider is IAMMProvider, Ownable, Initializable {
+contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
     using SafeERC20 for IERC20;
 
     address public immutable router;

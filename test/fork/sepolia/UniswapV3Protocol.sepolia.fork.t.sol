@@ -4,7 +4,7 @@ pragma solidity ^0.8.34;
 import {console2} from "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {UniswapV3Provider} from "provider-contracts/src/providers/UniswapV3Provider.sol";
+import {UniswapV3Protocol} from "protocol-contracts/src/protocols/UniswapV3Protocol.sol";
 import {sepolia} from "../../../script/addresses.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
@@ -15,11 +15,11 @@ import {
     IUniswapV3Factory,
     IUniswapV3Pool,
     IUniswapV3Router
-} from "provider-contracts/src/libs/uniswap/v3/Uniswap.sol";
-import {INonfungiblePositionManager} from "provider-contracts/src/libs/uniswap/v3/Uniswap.sol";
+} from "protocol-contracts/src/libs/uniswap/v3/Uniswap.sol";
+import {INonfungiblePositionManager} from "protocol-contracts/src/libs/uniswap/v3/Uniswap.sol";
 
 /// @dev Sepolia Uniswap V3: use WETH9 + USDT at 0.05% fee (pool `0x614dED...`); WETH/USDC pools are not deployed.
-contract TestUniswapProviderSepoliaFork is Test {
+contract TestUniswapProtocolSepoliaFork is Test {
     using SafeERC20 for IERC20;
     using Address for address;
     using Path for bytes;
@@ -27,14 +27,14 @@ contract TestUniswapProviderSepoliaFork is Test {
     uint24 internal constant WETH_USDT_FEE = 500;
     int24 internal constant WETH_USDT_TICK_SPACING = 10;
 
-    UniswapV3Provider public v3Provider;
+    UniswapV3Protocol public v3Protocol;
 
     function setUp() public {
         vm.createSelectFork("sepolia");
 
-        v3Provider = new UniswapV3Provider(sepolia.UNISWAP_V3_ROUTER, sepolia.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER);
-        v3Provider.initialize(address(this));
-        vm.deal(address(v3Provider), 0);
+        v3Protocol = new UniswapV3Protocol(sepolia.UNISWAP_V3_ROUTER, sepolia.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER);
+        v3Protocol.initialize(address(this));
+        vm.deal(address(v3Protocol), 0);
     }
 
     function _getV3PoolPrice(address tokenIn, address tokenOut, uint24 fee) internal view returns (uint256) {
@@ -79,11 +79,11 @@ contract TestUniswapProviderSepoliaFork is Test {
 
         uint256 usdtBalanceBefore = IERC20(address(sepolia.USDT)).balanceOf(address(this));
         deal(address(sepolia.WETH9), address(this), sellAmount);
-        IERC20(address(sepolia.WETH9)).safeApprove(address(v3Provider), sellAmount);
+        IERC20(address(sepolia.WETH9)).safeApprove(address(v3Protocol), sellAmount);
 
         console2.logBytes(swapData);
 
-        v3Provider.swap(swapData);
+        v3Protocol.swap(swapData);
 
         uint256 usdtBalanceAfter = IERC20(address(sepolia.USDT)).balanceOf(address(this));
         assertGt(usdtBalanceAfter, usdtBalanceBefore);
@@ -109,8 +109,8 @@ contract TestUniswapProviderSepoliaFork is Test {
 
         uint256 wethBalanceBefore = IERC20(address(sepolia.WETH9)).balanceOf(address(this));
         deal(address(sepolia.USDT), address(this), sellAmount);
-        IERC20(address(sepolia.USDT)).safeApprove(address(v3Provider), sellAmount);
-        v3Provider.swap(swapData);
+        IERC20(address(sepolia.USDT)).safeApprove(address(v3Protocol), sellAmount);
+        v3Protocol.swap(swapData);
 
         uint256 wethBalanceAfter = IERC20(address(sepolia.WETH9)).balanceOf(address(this));
         assertGt(wethBalanceAfter, wethBalanceBefore);
@@ -136,8 +136,8 @@ contract TestUniswapProviderSepoliaFork is Test {
 
         deal(token0, address(this), amount0Desired);
         deal(token1, address(this), amount1Desired);
-        IERC20(token0).safeApprove(address(v3Provider), amount0Desired);
-        IERC20(token1).safeApprove(address(v3Provider), amount1Desired);
+        IERC20(token0).safeApprove(address(v3Protocol), amount0Desired);
+        IERC20(token1).safeApprove(address(v3Protocol), amount1Desired);
 
         INonfungiblePositionManager.MintParams memory mintParams = INonfungiblePositionManager.MintParams({
             token0: token0,
@@ -155,11 +155,11 @@ contract TestUniswapProviderSepoliaFork is Test {
         bytes memory addData = abi.encode(true, abi.encode(mintParams));
 
         vm.recordLogs();
-        v3Provider.addLiquidity(addData);
+        v3Protocol.addLiquidity(addData);
 
         Vm.Log[] memory entries = vm.getRecordedLogs();
         address npm = sepolia.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER;
-        bytes32 toTopic = bytes32(uint256(uint160(address(v3Provider))));
+        bytes32 toTopic = bytes32(uint256(uint160(address(v3Protocol))));
         for (uint256 i = 0; i < entries.length; i++) {
             if (
                 entries[i].emitter == npm && entries[i].topics[0] == ERC721_TRANSFER_TOPIC
@@ -178,14 +178,14 @@ contract TestUniswapProviderSepoliaFork is Test {
         uint256 tokenId = _mintV3PositionAndGetTokenId();
         assertGt(tokenId, 0, "tokenId from mint");
 
-        uint256 liquidity = v3Provider.getLiquidity(abi.encode(tokenId));
+        uint256 liquidity = v3Protocol.getLiquidity(abi.encode(tokenId));
         assertGt(liquidity, 0, "liquidity after mint");
     }
 
     function test_Sepolia_V3_RemoveLiquidity() public {
         uint256 tokenId = _mintV3PositionAndGetTokenId();
 
-        uint256 liquidityAfterMint = v3Provider.getLiquidity(abi.encode(tokenId));
+        uint256 liquidityAfterMint = v3Protocol.getLiquidity(abi.encode(tokenId));
         assertGt(liquidityAfterMint, 0, "liquidity after mint");
 
         uint128 liquidityToDecrease =
@@ -198,20 +198,20 @@ contract TestUniswapProviderSepoliaFork is Test {
                 amount1Min: 0,
                 deadline: block.timestamp
             });
-        v3Provider.removeLiquidity(abi.encode(decreaseParams));
+        v3Protocol.removeLiquidity(abi.encode(decreaseParams));
 
-        uint256 liquidityAfterDecrease = v3Provider.getLiquidity(abi.encode(tokenId));
+        uint256 liquidityAfterDecrease = v3Protocol.getLiquidity(abi.encode(tokenId));
         assertEq(liquidityAfterDecrease, liquidityAfterMint - liquidityToDecrease, "liquidity after decrease");
     }
 
     function test_Sepolia_V3_ClaimAMMFees() public {
         uint256 tokenId = _mintV3PositionAndGetTokenId();
-        assertGt(v3Provider.getLiquidity(abi.encode(tokenId)), 0, "liquidity after mint");
+        assertGt(v3Protocol.getLiquidity(abi.encode(tokenId)), 0, "liquidity after mint");
 
         INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
             tokenId: tokenId, recipient: address(this), amount0Max: type(uint128).max, amount1Max: type(uint128).max
         });
-        v3Provider.claimAMMFees(abi.encode(collectParams));
+        v3Protocol.claimAMMFees(abi.encode(collectParams));
     }
 
     receive() external payable {}

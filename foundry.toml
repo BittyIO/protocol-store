@@ -4,7 +4,7 @@ src = "src"
 out = "out"
 libs = ["lib"]
 remappings = [
-    "provider-contracts/=./",
+    "protocol-contracts/=./",
 ]
 solc_version = "0.8.34"
 memory_limit = 43554432
