@@ -7,12 +7,8 @@ import {SkyV1Protocol} from "protocol-contracts/src/protocols/SkyV1Protocol.sol"
 
 contract SkyV1ProtocolScript is DeployScript {
     function deploy() public override {
-        SkyV1Protocol skyProtocol = new SkyV1Protocol(
-            getAddress("USDC"),
-            getAddress("USDS"),
-            getAddress("S_USDS"),
-            getAddress("SKY_PSM")
-        );
+        SkyV1Protocol skyProtocol =
+            new SkyV1Protocol(getAddress("USDC"), getAddress("USDS"), getAddress("S_USDS"), getAddress("SKY_PSM"));
         console2.log("SkyV1Protocol deployed at", address(skyProtocol));
         saveAddress("SKY_V1_PROTOCOL", address(skyProtocol));
     }

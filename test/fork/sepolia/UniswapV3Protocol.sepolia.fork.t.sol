@@ -32,7 +32,9 @@ contract TestUniswapProtocolSepoliaFork is Test {
     function setUp() public {
         vm.createSelectFork("sepolia");
 
-        v3Protocol = new UniswapV3Protocol(sepolia.UNISWAP_V3_ROUTER, sepolia.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER);
+        v3Protocol = new UniswapV3Protocol(
+            sepolia.UNISWAP_V3_ROUTER, sepolia.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER, sepolia.BITTY_GUARD
+        );
         v3Protocol.initialize(address(this));
         vm.deal(address(v3Protocol), 0);
     }

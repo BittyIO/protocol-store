@@ -40,8 +40,7 @@ contract TestAaveV3ProtocolSepoliaFork is Test {
         uint256 balanceBeforeSupply = IERC20(sepolia.AAVE_WETH).balanceOf(address(this));
         aaveProtocol.supply(sepolia.AAVE_WETH, 1 ether);
 
-        (uint256 aTokenBalance,,,,,,,,) =
-            poolDataProvider.getUserReserveData(sepolia.AAVE_WETH, address(aaveProtocol));
+        (uint256 aTokenBalance,,,,,,,,) = poolDataProvider.getUserReserveData(sepolia.AAVE_WETH, address(aaveProtocol));
 
         assertEq(IERC20(sepolia.AAVE_WETH).balanceOf(address(aaveProtocol)), 0);
 

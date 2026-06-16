@@ -24,10 +24,24 @@ contract TestUniswapProtocolFork is Test {
 
     UniswapV3Protocol public v3Protocol;
 
+    address internal constant FEE_RECIPIENT = 0x12EE2de7BF086388B1D560eb95e7191Edfab9823;
+    uint256 internal constant SWAP_FEE_BPS = 20;
+    uint256 internal constant COLLECT_FEE_BPS = 100;
+
+    function _assertFeeSplit(uint256 feeRecipientAmount, uint256 ownerAmount, uint256 feeBps) internal pure {
+        if (feeRecipientAmount == 0 && ownerAmount == 0) {
+            return;
+        }
+        uint256 total = feeRecipientAmount + ownerAmount;
+        assertEq(feeRecipientAmount, total * feeBps / 10_000, "unexpected fee split");
+    }
+
     function setUp() public {
         vm.createSelectFork("mainnet");
 
-        v3Protocol = new UniswapV3Protocol(mainnet.UNISWAP_V3_ROUTER, mainnet.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER);
+        v3Protocol = new UniswapV3Protocol(
+            mainnet.UNISWAP_V3_ROUTER, mainnet.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER, mainnet.BITTY_GUARD
+        );
         v3Protocol.initialize(address(this));
         vm.deal(address(v3Protocol), 0);
     }
@@ -178,6 +192,67 @@ contract TestUniswapProtocolFork is Test {
         assertGe(usdtBalanceAfter - usdtBalanceBefore, buyAmountMin);
     }
 
+    function test_V3_SwapFee_ChargesStablecoinInputFee() public {
+        address[] memory path = new address[](2);
+        path[0] = address(mainnet.USDC);
+        path[1] = address(mainnet.WETH);
+
+        uint24[] memory fees = new uint24[](1);
+        fees[0] = 500;
+
+        bytes memory encodedPath = Path.encodePath(path, fees);
+
+        uint256 price = _getV3PoolPrice(address(mainnet.USDC), address(mainnet.WETH), 3000);
+        uint256 sellAmount = 1000 * 1e6;
+        uint256 expectedEthOutput = Math.mulDiv(sellAmount, 1e18, price);
+        uint256 buyAmountMin = Math.mulDiv(expectedEthOutput, 95, 100);
+
+        bytes memory swapData = abi.encode(path[0], sellAmount, path[1], buyAmountMin, encodedPath);
+        uint256 expectedFee = sellAmount * SWAP_FEE_BPS / 10_000;
+
+        uint256 feeRecipientBefore = IERC20(address(mainnet.USDC)).balanceOf(FEE_RECIPIENT);
+        deal(address(mainnet.USDC), address(this), sellAmount);
+        IERC20(address(mainnet.USDC)).safeApprove(address(v3Protocol), sellAmount);
+
+        v3Protocol.swap(swapData);
+
+        assertEq(
+            IERC20(address(mainnet.USDC)).balanceOf(FEE_RECIPIENT) - feeRecipientBefore,
+            expectedFee,
+            "stablecoin input swap fee"
+        );
+    }
+
+    function test_V3_SwapFee_ChargesOutputFee() public {
+        address[] memory path = new address[](2);
+        path[0] = address(mainnet.WETH);
+        path[1] = address(mainnet.USDT);
+
+        uint24[] memory fees = new uint24[](1);
+        fees[0] = 3000;
+
+        bytes memory encodedPath = Path.encodePath(path, fees);
+
+        uint256 price = _getV3PoolPrice(path[0], path[1], fees[0]);
+        uint256 sellAmount = 1 ether;
+        uint256 buyAmountMin = Math.mulDiv(price, 95, 100);
+
+        bytes memory swapData = abi.encode(path[0], sellAmount, path[1], buyAmountMin, encodedPath);
+
+        uint256 feeRecipientBefore = IERC20(address(mainnet.USDT)).balanceOf(FEE_RECIPIENT);
+        uint256 ownerBefore = IERC20(address(mainnet.USDT)).balanceOf(address(this));
+        deal(address(mainnet.WETH), address(this), sellAmount);
+        IERC20(address(mainnet.WETH)).safeApprove(address(v3Protocol), sellAmount);
+
+        v3Protocol.swap(swapData);
+
+        _assertFeeSplit(
+            IERC20(address(mainnet.USDT)).balanceOf(FEE_RECIPIENT) - feeRecipientBefore,
+            IERC20(address(mainnet.USDT)).balanceOf(address(this)) - ownerBefore,
+            SWAP_FEE_BPS
+        );
+    }
+
     // ============ Uniswap V3 AMM (addLiquidity / removeLiquidity / claimAMMFees / getLiquidity) ============
 
     bytes32 constant ERC721_TRANSFER_TOPIC = keccak256("Transfer(address,address,uint256)");
@@ -278,6 +353,39 @@ contract TestUniswapProtocolFork is Test {
         assertEq(IERC20(token1).balanceOf(encodedRecipient), bal1Before, "token1 must not go to encoded recipient");
     }
 
+    function test_V3_ClaimAMMFees_SendsOnePercentToFeeRecipient() public {
+        uint256 tokenId = _mintV3PositionAndGetTokenId();
+
+        address token0 = mainnet.WETH < mainnet.USDC ? mainnet.WETH : mainnet.USDC;
+        address token1 = mainnet.WETH < mainnet.USDC ? mainnet.USDC : mainnet.WETH;
+
+        _swapOnPoolToAccruePositionFees(token0, token1);
+
+        uint256 feeRec0Before = IERC20(token0).balanceOf(FEE_RECIPIENT);
+        uint256 feeRec1Before = IERC20(token1).balanceOf(FEE_RECIPIENT);
+        uint256 owner0Before = IERC20(token0).balanceOf(address(this));
+        uint256 owner1Before = IERC20(token1).balanceOf(address(this));
+
+        INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
+            tokenId: tokenId,
+            recipient: makeAddr("ignoredRecipient"),
+            amount0Max: type(uint128).max,
+            amount1Max: type(uint128).max
+        });
+        v3Protocol.claimAMMFees(abi.encode(collectParams));
+
+        _assertFeeSplit(
+            IERC20(token0).balanceOf(FEE_RECIPIENT) - feeRec0Before,
+            IERC20(token0).balanceOf(address(this)) - owner0Before,
+            COLLECT_FEE_BPS
+        );
+        _assertFeeSplit(
+            IERC20(token1).balanceOf(FEE_RECIPIENT) - feeRec1Before,
+            IERC20(token1).balanceOf(address(this)) - owner1Before,
+            COLLECT_FEE_BPS
+        );
+    }
+
     function test_V3_RemoveLiquidity() public {
         uint256 tokenId = _mintV3PositionAndGetTokenId();
 
@@ -339,6 +447,64 @@ contract TestUniswapProtocolFork is Test {
         assertEq(IERC20(token0).balanceOf(address(v3Protocol)), 0, "protocol must hold no token0");
         assertEq(IERC20(token1).balanceOf(address(v3Protocol)), 0, "protocol must hold no token1");
         assertEq(v3Protocol.getLiquidity(abi.encode(tokenId)), 0, "liquidity must be zero after full removal");
+    }
+
+    function test_V3_RemoveLiquidity_ChargesOnePercentCollectionFee() public {
+        uint256 tokenId = _mintV3PositionAndGetTokenId();
+
+        address token0 = mainnet.WETH < mainnet.USDC ? mainnet.WETH : mainnet.USDC;
+        address token1 = mainnet.WETH < mainnet.USDC ? mainnet.USDC : mainnet.WETH;
+
+        uint128 liquidity = uint128(v3Protocol.getLiquidity(abi.encode(tokenId)));
+        assertGt(liquidity, 0, "liquidity before remove");
+
+        uint256 feeRec0Before = IERC20(token0).balanceOf(FEE_RECIPIENT);
+        uint256 feeRec1Before = IERC20(token1).balanceOf(FEE_RECIPIENT);
+        uint256 owner0Before = IERC20(token0).balanceOf(address(this));
+        uint256 owner1Before = IERC20(token1).balanceOf(address(this));
+
+        INonfungiblePositionManager.DecreaseLiquidityParams memory decreaseParams =
+            INonfungiblePositionManager.DecreaseLiquidityParams({
+                tokenId: tokenId, liquidity: liquidity, amount0Min: 0, amount1Min: 0, deadline: block.timestamp
+            });
+        v3Protocol.removeLiquidity(abi.encode(decreaseParams));
+
+        _assertFeeSplit(
+            IERC20(token0).balanceOf(FEE_RECIPIENT) - feeRec0Before,
+            IERC20(token0).balanceOf(address(this)) - owner0Before,
+            COLLECT_FEE_BPS
+        );
+        _assertFeeSplit(
+            IERC20(token1).balanceOf(FEE_RECIPIENT) - feeRec1Before,
+            IERC20(token1).balanceOf(address(this)) - owner1Before,
+            COLLECT_FEE_BPS
+        );
+    }
+
+    function _swapOnPoolToAccruePositionFees(address token0, address token1) internal {
+        bool wethIsToken0 = token0 == mainnet.WETH;
+        address tokenIn = wethIsToken0 ? token0 : token1;
+        address tokenOut = wethIsToken0 ? token1 : token0;
+
+        address[] memory path = new address[](2);
+        path[0] = tokenIn;
+        path[1] = tokenOut;
+
+        uint24[] memory fees = new uint24[](1);
+        fees[0] = 3000;
+
+        bytes memory encodedPath = Path.encodePath(path, fees);
+        uint256 swapAmount = tokenIn == mainnet.WETH ? 2 ether : 5000 * 1e6;
+
+        deal(tokenIn, address(this), swapAmount);
+        IERC20(tokenIn).safeApprove(mainnet.UNISWAP_V3_ROUTER, swapAmount);
+
+        IUniswapV3Router(mainnet.UNISWAP_V3_ROUTER)
+            .exactInput(
+                IUniswapV3Router.ExactInputParams({
+                    path: encodedPath, recipient: address(this), amountIn: swapAmount, amountOutMinimum: 0
+                })
+            );
     }
 
     function test_V3_AddLiquidity_Mint_ReturnsUnusedTokens() public {

@@ -36,7 +36,7 @@ contract SkyV1Protocol is IStakingProtocol, Ownable, Initializable {
      * @dev Converts USDC → USDS via PSM, then deposits USDS into sUSDS.
      * @param asset Must be the USDC address.
      * @param amount Amount of USDC (6 decimals) to stake.
-    */
+     */
     function stake(address asset, uint256 amount) external payable override onlyOwner {
         if (asset != address(usdc)) revert InvalidAsset();
 
@@ -58,7 +58,7 @@ contract SkyV1Protocol is IStakingProtocol, Ownable, Initializable {
      * @dev Returns current staked balance in USDC terms (6 decimals).
      * @param asset Must be the USDC address.
      * @return The staked balance in USDC terms (6 decimals).
-    */
+     */
     function getStakedBalance(address asset) external view override returns (uint256) {
         if (asset != address(usdc)) revert InvalidAsset();
         uint256 shares = sUsds.balanceOf(address(this));
@@ -67,12 +67,12 @@ contract SkyV1Protocol is IStakingProtocol, Ownable, Initializable {
         return usdsValue / GEM_CONVERSION_FACTOR;
     }
 
-    /**  
+    /**
      * @notice Unstake the staked asset.
      * @dev Redeems sUSDS → USDS, converts USDS → USDC via PSM, sends USDC to vault.
      * @param asset Must be the USDC address.
      * @param amount Amount of USDC (6 decimals) to unstake.
-    */
+     */
     function unstake(address asset, uint256 amount) external override onlyOwner {
         if (asset != address(usdc)) revert InvalidAsset();
 
@@ -94,7 +94,7 @@ contract SkyV1Protocol is IStakingProtocol, Ownable, Initializable {
      * @notice Sky Protocol (sUSDS) supports immediate withdrawal — no queued requests.
      * @dev Sky Protocol (sUSDS) supports immediate withdrawal — no queued requests.
      * @return The unstake request ids.
-    */
+     */
     function getUnstakeRequestIds() external pure override returns (uint256[] memory) {
         return new uint256[](0);
     }
@@ -102,7 +102,7 @@ contract SkyV1Protocol is IStakingProtocol, Ownable, Initializable {
     /**
      * @notice No-op: Sky Protocol does not use a withdrawal queue.
      * @dev No-op: Sky Protocol does not use a withdrawal queue.
-    */
+     */
     function claimUnstaked(uint256[] memory) external view override onlyOwner {
         revert ClaimUnstakedNotSupported();
     }

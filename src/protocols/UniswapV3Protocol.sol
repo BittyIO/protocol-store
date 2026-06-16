@@ -2,6 +2,7 @@
 pragma solidity ^0.8.34;
 
 import {IAMMProtocol} from "../interfaces/IAMMProtocol.sol";
+import {IGuard} from "../interfaces/IGuard.sol";
 import {IUniswapV3Router, INonfungiblePositionManager} from "../libs/uniswap/v3/Uniswap.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -12,12 +13,18 @@ import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initia
 contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
     using SafeERC20 for IERC20;
 
+    address public constant FEE_RECIPIENT = 0x12EE2de7BF086388B1D560eb95e7191Edfab9823;
+    uint256 private constant SWAP_FEE_BPS = 20; // 0.2%
+    uint256 private constant COLLECT_FEE_BPS = 100; // 1%
+
     address public immutable router;
     address public immutable positionManager;
+    address public immutable bittyGuard;
 
-    constructor(address router_, address positionManager_) {
+    constructor(address router_, address positionManager_, address bittyGuard_) {
         router = router_;
         positionManager = positionManager_;
+        bittyGuard = bittyGuard_;
     }
 
     function initialize(address newOwner) external override initializer {
@@ -30,16 +37,34 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
         (address tokenIn, uint256 amountIn, address tokenOut, uint256 amountOutMinimum, bytes memory path) =
             abi.decode(data, (address, uint256, address, uint256, bytes));
 
+        uint256 swapAmountIn = amountIn;
+        bool feeFromOutput;
+
+        if (_isStablecoin(tokenIn)) {
+            uint256 fee = amountIn * SWAP_FEE_BPS / 10_000;
+            if (fee > 0) {
+                if (tokenIn != address(0)) {
+                    IERC20(tokenIn).safeTransferFrom(msg.sender, FEE_RECIPIENT, fee);
+                } else {
+                    Address.sendValue(payable(FEE_RECIPIENT), fee);
+                }
+                swapAmountIn = amountIn - fee;
+            }
+        } else {
+            feeFromOutput = true;
+        }
+
         IUniswapV3Router.ExactInputParams memory params = IUniswapV3Router.ExactInputParams({
-            path: path, recipient: address(this), amountIn: amountIn, amountOutMinimum: amountOutMinimum
+            path: path, recipient: address(this), amountIn: swapAmountIn, amountOutMinimum: amountOutMinimum
         });
 
         if (tokenIn != address(0)) {
-            IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
-            IERC20(tokenIn).safeApprove(router, amountIn);
+            IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), swapAmountIn);
+            IERC20(tokenIn).safeApprove(router, swapAmountIn);
         }
 
-        uint256 amountOut = IUniswapV3Router(router).exactInput{value: msg.value}(params);
+        uint256 amountOut =
+            IUniswapV3Router(router).exactInput{value: tokenIn == address(0) ? swapAmountIn : msg.value}(params);
 
         if (tokenIn != address(0)) {
             IERC20(tokenIn).safeApprove(router, 0);
@@ -50,7 +75,15 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
         }
 
         if (tokenOut != address(0)) {
-            IERC20(tokenOut).safeTransfer(msg.sender, amountOut);
+            if (feeFromOutput) {
+                uint256 fee = amountOut * SWAP_FEE_BPS / 10_000;
+                if (fee > 0) {
+                    IERC20(tokenOut).safeTransfer(FEE_RECIPIENT, fee);
+                }
+                IERC20(tokenOut).safeTransfer(msg.sender, amountOut - fee);
+            } else {
+                IERC20(tokenOut).safeTransfer(msg.sender, amountOut);
+            }
         }
     }
 
@@ -111,15 +144,7 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
         INonfungiblePositionManager.DecreaseLiquidityParams memory params =
             abi.decode(data, (INonfungiblePositionManager.DecreaseLiquidityParams));
         INonfungiblePositionManager(positionManager).decreaseLiquidity(params);
-        INonfungiblePositionManager(positionManager)
-            .collect(
-                INonfungiblePositionManager.CollectParams({
-                    tokenId: params.tokenId,
-                    recipient: msg.sender,
-                    amount0Max: type(uint128).max,
-                    amount1Max: type(uint128).max
-                })
-            );
+        _collectWithFee(params.tokenId, type(uint128).max, type(uint128).max);
     }
 
     /**
@@ -131,13 +156,46 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
     function claimAMMFees(bytes memory data) external override onlyOwner {
         INonfungiblePositionManager.CollectParams memory params =
             abi.decode(data, (INonfungiblePositionManager.CollectParams));
-        params.recipient = msg.sender;
-        INonfungiblePositionManager(positionManager).collect(params);
+        _collectWithFee(params.tokenId, params.amount0Max, params.amount1Max);
     }
 
     function getLiquidity(bytes memory data) external view override returns (uint256) {
         uint256 tokenId = abi.decode(data, (uint256));
         (,,,,,,, uint128 liquidity,,,,) = INonfungiblePositionManager(positionManager).positions(tokenId);
         return uint256(liquidity);
+    }
+
+    function _isStablecoin(address token) internal view returns (bool) {
+        return IGuard(bittyGuard).isStableCoinRegistered(token);
+    }
+
+    function _collectWithFee(uint256 tokenId, uint128 amount0Max, uint128 amount1Max) internal {
+        (,, address token0, address token1,,,,,,,,) = INonfungiblePositionManager(positionManager).positions(tokenId);
+
+        (uint256 amount0, uint256 amount1) = INonfungiblePositionManager(positionManager)
+            .collect(
+                INonfungiblePositionManager.CollectParams({
+                    tokenId: tokenId, recipient: address(this), amount0Max: amount0Max, amount1Max: amount1Max
+                })
+            );
+
+        _transferCollectedWithFee(token0, token1, amount0, amount1);
+    }
+
+    function _transferCollectedWithFee(address token0, address token1, uint256 amount0, uint256 amount1) internal {
+        if (amount0 > 0) {
+            uint256 fee0 = amount0 * COLLECT_FEE_BPS / 10_000;
+            if (fee0 > 0) {
+                IERC20(token0).safeTransfer(FEE_RECIPIENT, fee0);
+            }
+            IERC20(token0).safeTransfer(msg.sender, amount0 - fee0);
+        }
+        if (amount1 > 0) {
+            uint256 fee1 = amount1 * COLLECT_FEE_BPS / 10_000;
+            if (fee1 > 0) {
+                IERC20(token1).safeTransfer(FEE_RECIPIENT, fee1);
+            }
+            IERC20(token1).safeTransfer(msg.sender, amount1 - fee1);
+        }
     }
 }

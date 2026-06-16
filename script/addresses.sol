@@ -24,6 +24,8 @@ library mainnet {
     address public constant USDS = 0xdC035D45d973E3EC169d2276DDab16f1e407384F;
     address public constant S_USDS = 0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD;
     address public constant SKY_PSM = 0xA188EEC8F81263234dA3622A406892F3D630f98c;
+
+    address public constant BITTY_GUARD = 0x00000000455E105788ddD4D34113Fdbac1a37f88;
 }
 
 /// @dev Sepolia addresses parallel to `mainnet` for fork tests on Sepolia.
@@ -46,5 +48,7 @@ library sepolia {
 
     address public constant STETH = 0x3e3FE7dBc6B4C189E7128855dD526361c49b40Af;
     address public constant UNSTETH = 0x1583C7b3f4C3B008720E6BcE5726336b0aB25fdd;
+
+    address public constant BITTY_GUARD = 0x00000000455E105788ddD4D34113Fdbac1a37f88;
 }
 

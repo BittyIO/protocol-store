@@ -8,7 +8,9 @@ import {UniswapV3Protocol} from "protocol-contracts/src/protocols/UniswapV3Proto
 contract UniswapV3ProtocolScript is DeployScript {
     function deploy() public override {
         UniswapV3Protocol uniswapV3Protocol = new UniswapV3Protocol(
-            getAddress("UNISWAP_V3_ROUTER"), getAddress("UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER")
+            getAddress("UNISWAP_V3_ROUTER"),
+            getAddress("UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER"),
+            getAddress("BITTY_GUARD")
         );
         console2.log("UniswapV3Protocol deployed at", address(uniswapV3Protocol));
         saveAddress("UNISWAP_V3_PROTOCOL", address(uniswapV3Protocol));

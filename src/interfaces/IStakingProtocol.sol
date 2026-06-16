@@ -39,7 +39,7 @@ interface IStakingProtocol is IProtocol {
 
     /**
      * @notice Get the unstake request ids.
-     * @dev Get the unstake request ids, some staking protocols.  
+     * @dev Get the unstake request ids, some staking protocols.
      * Some protocols for ETH staking need to wait a period of time before the unstake request is finalized.
      * Some protocols for StableCoin staking do not need this.
      * @return The unstake request ids.
