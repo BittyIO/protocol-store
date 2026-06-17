@@ -33,6 +33,14 @@ interface IAMMProtocol is IProtocol {
     function removeLiquidity(bytes memory data) external;
 
     /**
+     * @notice Decrease liquidity from the AMM protocol and collect only the decreased tokens with fee.
+     * @dev Decrease liquidity from the AMM protocol, collects only the decreased amount (not accrued fees).
+     * @param data The data for the decrease liquidity.
+     * @dev Only the asset manager can execute it.
+     */
+    function decreaseLiquidity(bytes memory data) external;
+
+    /**
      * @notice Claim fees from the AMM protocol.
      * @dev Claim fees from the AMM protocol.
      * @param data The data for the claim fees.

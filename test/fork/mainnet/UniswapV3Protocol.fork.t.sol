@@ -597,6 +597,84 @@ contract TestUniswapProtocolFork is Test {
         assertEq(IERC20(token1).balanceOf(address(v3Protocol)), 0, "protocol clone must hold no token1");
     }
 
+    function test_V3_DecreaseLiquidity_ChargesOnePercentFee() public {
+        uint256 tokenId = _mintV3PositionAndGetTokenId();
+
+        address token0 = mainnet.WETH < mainnet.USDC ? mainnet.WETH : mainnet.USDC;
+        address token1 = mainnet.WETH < mainnet.USDC ? mainnet.USDC : mainnet.WETH;
+
+        uint256 liquidityBefore = v3Protocol.getLiquidity(abi.encode(tokenId));
+        assertGt(liquidityBefore, 0, "liquidity before decrease");
+
+        uint128 liquidityToDecrease = uint128(liquidityBefore / 2);
+
+        uint256 feeRec0Before = IERC20(token0).balanceOf(FEE_RECIPIENT);
+        uint256 feeRec1Before = IERC20(token1).balanceOf(FEE_RECIPIENT);
+        uint256 owner0Before = IERC20(token0).balanceOf(address(this));
+        uint256 owner1Before = IERC20(token1).balanceOf(address(this));
+
+        INonfungiblePositionManager.DecreaseLiquidityParams memory decreaseParams =
+            INonfungiblePositionManager.DecreaseLiquidityParams({
+                tokenId: tokenId,
+                liquidity: liquidityToDecrease,
+                amount0Min: 0,
+                amount1Min: 0,
+                deadline: block.timestamp
+            });
+        v3Protocol.decreaseLiquidity(abi.encode(decreaseParams));
+
+        assertEq(
+            v3Protocol.getLiquidity(abi.encode(tokenId)),
+            liquidityBefore - liquidityToDecrease,
+            "liquidity after decrease"
+        );
+
+        _assertFeeSplit(
+            IERC20(token0).balanceOf(FEE_RECIPIENT) - feeRec0Before,
+            IERC20(token0).balanceOf(address(this)) - owner0Before,
+            COLLECT_FEE_BPS
+        );
+        _assertFeeSplit(
+            IERC20(token1).balanceOf(FEE_RECIPIENT) - feeRec1Before,
+            IERC20(token1).balanceOf(address(this)) - owner1Before,
+            COLLECT_FEE_BPS
+        );
+    }
+
+    function test_V3_DecreaseLiquidity_DoesNotCollectAccruedFees() public {
+        uint256 tokenId = _mintV3PositionAndGetTokenId();
+
+        address token0 = mainnet.WETH < mainnet.USDC ? mainnet.WETH : mainnet.USDC;
+        address token1 = mainnet.WETH < mainnet.USDC ? mainnet.USDC : mainnet.WETH;
+
+        _swapOnPoolToAccruePositionFees(token0, token1);
+
+        uint128 liquidity = uint128(v3Protocol.getLiquidity(abi.encode(tokenId)));
+
+        uint256 owner0Before = IERC20(token0).balanceOf(address(this));
+        uint256 owner1Before = IERC20(token1).balanceOf(address(this));
+
+        INonfungiblePositionManager.DecreaseLiquidityParams memory decreaseParams =
+            INonfungiblePositionManager.DecreaseLiquidityParams({
+                tokenId: tokenId, liquidity: liquidity, amount0Min: 0, amount1Min: 0, deadline: block.timestamp
+            });
+        v3Protocol.decreaseLiquidity(abi.encode(decreaseParams));
+
+        uint256 owner0AfterDecrease = IERC20(token0).balanceOf(address(this));
+        uint256 owner1AfterDecrease = IERC20(token1).balanceOf(address(this));
+
+        INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
+            tokenId: tokenId, recipient: address(this), amount0Max: type(uint128).max, amount1Max: type(uint128).max
+        });
+        v3Protocol.claimAMMFees(abi.encode(collectParams));
+
+        assertTrue(
+            IERC20(token0).balanceOf(address(this)) > owner0AfterDecrease
+                || IERC20(token1).balanceOf(address(this)) > owner1AfterDecrease,
+            "accrued fees still collectible after decreaseLiquidity"
+        );
+    }
+
     receive() external payable {}
 }
 

@@ -147,6 +147,13 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
         _collectWithFee(params.tokenId, type(uint128).max, type(uint128).max);
     }
 
+    function decreaseLiquidity(bytes memory data) external override onlyOwner {
+        INonfungiblePositionManager.DecreaseLiquidityParams memory params =
+            abi.decode(data, (INonfungiblePositionManager.DecreaseLiquidityParams));
+        (uint256 amount0, uint256 amount1) = INonfungiblePositionManager(positionManager).decreaseLiquidity(params);
+        _collectWithFee(params.tokenId, uint128(amount0), uint128(amount1));
+    }
+
     /**
      * @notice Claim fees from the Uniswap V3 position.
      * @dev Claim fees from the Uniswap V3 position.
