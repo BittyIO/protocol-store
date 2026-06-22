@@ -25,16 +25,16 @@ interface IAMMProtocol is IProtocol {
     function addLiquidity(bytes memory data) external;
 
     /**
-     * @notice Remove liquidity from the AMM protocol, this will also collect the fees.
-     * @dev Remove liquidity from the AMM protocol.
+     * @notice Remove all liquidity from the AMM protocol and claim accrued fees.
+     * @dev Claims accrued fees (with collect fee to FEE_RECIPIENT), then removes the full position liquidity.
      * @param data The data for the remove liquidity.
      * @dev Only the asset manager can execute it.
      */
     function removeLiquidity(bytes memory data) external;
 
     /**
-     * @notice Decrease liquidity from the AMM protocol and collect only the decreased tokens with fee.
-     * @dev Decrease liquidity from the AMM protocol, collects only the decreased amount (not accrued fees).
+     * @notice Decrease liquidity from the AMM protocol and collect the decreased tokens.
+     * @dev Partial decreases collect principal only. A full-position decrease also claims accrued AMM fees (with collect fee).
      * @param data The data for the decrease liquidity.
      * @dev Only the asset manager can execute it.
      */

@@ -155,20 +155,13 @@ contract TestUniswapProtocolSepoliaFork is Test {
         uint256 liquidityAfterMint = v3Protocol.getLiquidity(abi.encode(tokenId));
         assertGt(liquidityAfterMint, 0, "liquidity after mint");
 
-        uint128 liquidityToDecrease =
-            liquidityAfterMint >= 2 ? uint128(liquidityAfterMint / 2) : uint128(liquidityAfterMint);
         INonfungiblePositionManager.DecreaseLiquidityParams memory decreaseParams =
             INonfungiblePositionManager.DecreaseLiquidityParams({
-                tokenId: tokenId,
-                liquidity: liquidityToDecrease,
-                amount0Min: 0,
-                amount1Min: 0,
-                deadline: block.timestamp
+                tokenId: tokenId, liquidity: 0, amount0Min: 0, amount1Min: 0, deadline: block.timestamp
             });
         v3Protocol.removeLiquidity(abi.encode(decreaseParams));
 
-        uint256 liquidityAfterDecrease = v3Protocol.getLiquidity(abi.encode(tokenId));
-        assertEq(liquidityAfterDecrease, liquidityAfterMint - liquidityToDecrease, "liquidity after decrease");
+        assertEq(v3Protocol.getLiquidity(abi.encode(tokenId)), 0, "liquidity must be zero after remove");
     }
 
     function test_Sepolia_V3_ClaimAMMFees() public {

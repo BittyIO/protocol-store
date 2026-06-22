@@ -353,6 +353,51 @@ contract TestUniswapProtocolFork is Test {
         assertEq(IERC20(token1).balanceOf(encodedRecipient), bal1Before, "token1 must not go to encoded recipient");
     }
 
+    function test_V3_ClaimAMMFees_DoesNotChargeCollectFeeOnPrincipalInTokensOwed() public {
+        uint256 tokenId = _mintV3PositionAndGetTokenId();
+
+        address token0 = mainnet.WETH < mainnet.USDC ? mainnet.WETH : mainnet.USDC;
+        address token1 = mainnet.WETH < mainnet.USDC ? mainnet.USDC : mainnet.WETH;
+
+        _swapOnPoolToAccruePositionFees(token0, token1);
+
+        uint128 liquidity = uint128(v3Protocol.getLiquidity(abi.encode(tokenId)));
+        vm.prank(address(v3Protocol));
+        INonfungiblePositionManager(mainnet.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER)
+            .decreaseLiquidity(
+                INonfungiblePositionManager.DecreaseLiquidityParams({
+                    tokenId: tokenId, liquidity: liquidity / 2, amount0Min: 0, amount1Min: 0, deadline: block.timestamp
+                })
+            );
+
+        (,,,,,,,,,, uint128 principalOwed0Before, uint128 principalOwed1Before) =
+            INonfungiblePositionManager(mainnet.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER).positions(tokenId);
+
+        uint256 feeRec0Before = IERC20(token0).balanceOf(FEE_RECIPIENT);
+        uint256 feeRec1Before = IERC20(token1).balanceOf(FEE_RECIPIENT);
+        uint256 owner0Before = IERC20(token0).balanceOf(address(this));
+        uint256 owner1Before = IERC20(token1).balanceOf(address(this));
+
+        INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
+            tokenId: tokenId, recipient: address(this), amount0Max: type(uint128).max, amount1Max: type(uint128).max
+        });
+        v3Protocol.claimAMMFees(abi.encode(collectParams));
+
+        uint256 feeRec0Received = IERC20(token0).balanceOf(FEE_RECIPIENT) - feeRec0Before;
+        uint256 feeRec1Received = IERC20(token1).balanceOf(FEE_RECIPIENT) - feeRec1Before;
+        uint256 owner0Received = IERC20(token0).balanceOf(address(this)) - owner0Before;
+        uint256 owner1Received = IERC20(token1).balanceOf(address(this)) - owner1Before;
+
+        assertTrue(owner0Received > 0 || owner1Received > 0, "owner must receive tokens");
+        assertTrue(principalOwed0Before > 0 || principalOwed1Before > 0, "principal must be owed before fee claim");
+        if (owner0Received > principalOwed0Before) {
+            _assertFeeSplit(feeRec0Received, owner0Received - principalOwed0Before, COLLECT_FEE_BPS);
+        }
+        if (owner1Received > principalOwed1Before) {
+            _assertFeeSplit(feeRec1Received, owner1Received - principalOwed1Before, COLLECT_FEE_BPS);
+        }
+    }
+
     function test_V3_ClaimAMMFees_SendsOnePercentToFeeRecipient() public {
         uint256 tokenId = _mintV3PositionAndGetTokenId();
 
@@ -392,25 +437,13 @@ contract TestUniswapProtocolFork is Test {
         uint256 liquidityAfterMint = v3Protocol.getLiquidity(abi.encode(tokenId));
         assertGt(liquidityAfterMint, 0, "liquidity after mint");
 
-        uint128 liquidityToDecrease =
-            liquidityAfterMint >= 2 ? uint128(liquidityAfterMint / 2) : uint128(liquidityAfterMint);
         INonfungiblePositionManager.DecreaseLiquidityParams memory decreaseParams =
             INonfungiblePositionManager.DecreaseLiquidityParams({
-                tokenId: tokenId,
-                liquidity: liquidityToDecrease,
-                amount0Min: 0,
-                amount1Min: 0,
-                deadline: block.timestamp
+                tokenId: tokenId, liquidity: 0, amount0Min: 0, amount1Min: 0, deadline: block.timestamp
             });
         v3Protocol.removeLiquidity(abi.encode(decreaseParams));
 
-        uint256 liquidityAfterDecrease = v3Protocol.getLiquidity(abi.encode(tokenId));
-        assertEq(liquidityAfterDecrease, liquidityAfterMint - liquidityToDecrease, "liquidity after decrease");
-
-        INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
-            tokenId: tokenId, recipient: address(this), amount0Max: type(uint128).max, amount1Max: type(uint128).max
-        });
-        v3Protocol.claimAMMFees(abi.encode(collectParams));
+        assertEq(v3Protocol.getLiquidity(abi.encode(tokenId)), 0, "liquidity must be zero after remove");
 
         address token0 = mainnet.WETH < mainnet.USDC ? mainnet.WETH : mainnet.USDC;
         address token1 = mainnet.WETH < mainnet.USDC ? mainnet.USDC : mainnet.WETH;
@@ -433,7 +466,7 @@ contract TestUniswapProtocolFork is Test {
 
         INonfungiblePositionManager.DecreaseLiquidityParams memory decreaseParams =
             INonfungiblePositionManager.DecreaseLiquidityParams({
-                tokenId: tokenId, liquidity: liquidity, amount0Min: 0, amount1Min: 0, deadline: block.timestamp
+                tokenId: tokenId, liquidity: 0, amount0Min: 0, amount1Min: 0, deadline: block.timestamp
             });
 
         v3Protocol.removeLiquidity(abi.encode(decreaseParams));
@@ -449,7 +482,41 @@ contract TestUniswapProtocolFork is Test {
         assertEq(v3Protocol.getLiquidity(abi.encode(tokenId)), 0, "liquidity must be zero after full removal");
     }
 
-    function test_V3_RemoveLiquidity_ChargesOnePercentCollectionFee() public {
+    function test_V3_RemoveLiquidity_ClaimsAccruedFeesWithCollectFeeAndRemovesAllLiquidity() public {
+        uint256 tokenId = _mintV3PositionAndGetTokenId();
+
+        address token0 = mainnet.WETH < mainnet.USDC ? mainnet.WETH : mainnet.USDC;
+        address token1 = mainnet.WETH < mainnet.USDC ? mainnet.USDC : mainnet.WETH;
+
+        _swapOnPoolToAccruePositionFees(token0, token1);
+
+        assertGt(v3Protocol.getLiquidity(abi.encode(tokenId)), 0, "liquidity before remove");
+
+        uint256 feeRec0Before = IERC20(token0).balanceOf(FEE_RECIPIENT);
+        uint256 feeRec1Before = IERC20(token1).balanceOf(FEE_RECIPIENT);
+        uint256 owner0Before = IERC20(token0).balanceOf(address(this));
+        uint256 owner1Before = IERC20(token1).balanceOf(address(this));
+
+        INonfungiblePositionManager.DecreaseLiquidityParams memory decreaseParams =
+            INonfungiblePositionManager.DecreaseLiquidityParams({
+                tokenId: tokenId, liquidity: 0, amount0Min: 0, amount1Min: 0, deadline: block.timestamp
+            });
+        v3Protocol.removeLiquidity(abi.encode(decreaseParams));
+
+        assertTrue(
+            IERC20(token0).balanceOf(FEE_RECIPIENT) - feeRec0Before > 0
+                || IERC20(token1).balanceOf(FEE_RECIPIENT) - feeRec1Before > 0,
+            "fee recipient receives collect fee on accrued fees"
+        );
+        assertTrue(
+            IERC20(token0).balanceOf(address(this)) > owner0Before
+                || IERC20(token1).balanceOf(address(this)) > owner1Before,
+            "owner receives principal and net fees"
+        );
+        assertEq(v3Protocol.getLiquidity(abi.encode(tokenId)), 0, "all liquidity removed");
+    }
+
+    function test_V3_RemoveLiquidity_DoesNotChargeCollectFeeWhenNoAccruedFees() public {
         uint256 tokenId = _mintV3PositionAndGetTokenId();
 
         address token0 = mainnet.WETH < mainnet.USDC ? mainnet.WETH : mainnet.USDC;
@@ -465,19 +532,16 @@ contract TestUniswapProtocolFork is Test {
 
         INonfungiblePositionManager.DecreaseLiquidityParams memory decreaseParams =
             INonfungiblePositionManager.DecreaseLiquidityParams({
-                tokenId: tokenId, liquidity: liquidity, amount0Min: 0, amount1Min: 0, deadline: block.timestamp
+                tokenId: tokenId, liquidity: 0, amount0Min: 0, amount1Min: 0, deadline: block.timestamp
             });
         v3Protocol.removeLiquidity(abi.encode(decreaseParams));
 
-        _assertFeeSplit(
-            IERC20(token0).balanceOf(FEE_RECIPIENT) - feeRec0Before,
-            IERC20(token0).balanceOf(address(this)) - owner0Before,
-            COLLECT_FEE_BPS
-        );
-        _assertFeeSplit(
-            IERC20(token1).balanceOf(FEE_RECIPIENT) - feeRec1Before,
-            IERC20(token1).balanceOf(address(this)) - owner1Before,
-            COLLECT_FEE_BPS
+        assertEq(IERC20(token0).balanceOf(FEE_RECIPIENT) - feeRec0Before, 0, "no collect fee on principal");
+        assertEq(IERC20(token1).balanceOf(FEE_RECIPIENT) - feeRec1Before, 0, "no collect fee on principal");
+        assertTrue(
+            IERC20(token0).balanceOf(address(this)) > owner0Before
+                || IERC20(token1).balanceOf(address(this)) > owner1Before,
+            "owner must receive full principal"
         );
     }
 
@@ -597,7 +661,7 @@ contract TestUniswapProtocolFork is Test {
         assertEq(IERC20(token1).balanceOf(address(v3Protocol)), 0, "protocol clone must hold no token1");
     }
 
-    function test_V3_DecreaseLiquidity_ChargesOnePercentFee() public {
+    function test_V3_DecreaseLiquidity_DoesNotChargeCollectFee() public {
         uint256 tokenId = _mintV3PositionAndGetTokenId();
 
         address token0 = mainnet.WETH < mainnet.USDC ? mainnet.WETH : mainnet.USDC;
@@ -629,19 +693,16 @@ contract TestUniswapProtocolFork is Test {
             "liquidity after decrease"
         );
 
-        _assertFeeSplit(
-            IERC20(token0).balanceOf(FEE_RECIPIENT) - feeRec0Before,
-            IERC20(token0).balanceOf(address(this)) - owner0Before,
-            COLLECT_FEE_BPS
-        );
-        _assertFeeSplit(
-            IERC20(token1).balanceOf(FEE_RECIPIENT) - feeRec1Before,
-            IERC20(token1).balanceOf(address(this)) - owner1Before,
-            COLLECT_FEE_BPS
+        assertEq(IERC20(token0).balanceOf(FEE_RECIPIENT) - feeRec0Before, 0, "no collect fee on decrease");
+        assertEq(IERC20(token1).balanceOf(FEE_RECIPIENT) - feeRec1Before, 0, "no collect fee on decrease");
+        assertTrue(
+            IERC20(token0).balanceOf(address(this)) > owner0Before
+                || IERC20(token1).balanceOf(address(this)) > owner1Before,
+            "owner must receive full decreased principal"
         );
     }
 
-    function test_V3_DecreaseLiquidity_DoesNotCollectAccruedFees() public {
+    function test_V3_DecreaseLiquidity_FullPositionClaimsAccruedFeesWithCollectFee() public {
         uint256 tokenId = _mintV3PositionAndGetTokenId();
 
         address token0 = mainnet.WETH < mainnet.USDC ? mainnet.WETH : mainnet.USDC;
@@ -651,12 +712,60 @@ contract TestUniswapProtocolFork is Test {
 
         uint128 liquidity = uint128(v3Protocol.getLiquidity(abi.encode(tokenId)));
 
+        uint256 feeRec0Before = IERC20(token0).balanceOf(FEE_RECIPIENT);
+        uint256 feeRec1Before = IERC20(token1).balanceOf(FEE_RECIPIENT);
         uint256 owner0Before = IERC20(token0).balanceOf(address(this));
         uint256 owner1Before = IERC20(token1).balanceOf(address(this));
 
         INonfungiblePositionManager.DecreaseLiquidityParams memory decreaseParams =
             INonfungiblePositionManager.DecreaseLiquidityParams({
                 tokenId: tokenId, liquidity: liquidity, amount0Min: 0, amount1Min: 0, deadline: block.timestamp
+            });
+        v3Protocol.decreaseLiquidity(abi.encode(decreaseParams));
+
+        assertEq(v3Protocol.getLiquidity(abi.encode(tokenId)), 0, "full position liquidity removed");
+
+        uint256 feeRec0Received = IERC20(token0).balanceOf(FEE_RECIPIENT) - feeRec0Before;
+        uint256 feeRec1Received = IERC20(token1).balanceOf(FEE_RECIPIENT) - feeRec1Before;
+        uint256 owner0Received = IERC20(token0).balanceOf(address(this)) - owner0Before;
+        uint256 owner1Received = IERC20(token1).balanceOf(address(this)) - owner1Before;
+
+        assertTrue(feeRec0Received > 0 || feeRec1Received > 0, "fee recipient receives collect fee on accrued fees");
+        assertTrue(owner0Received > 0 || owner1Received > 0, "owner receives principal and net fees");
+        assertLt(feeRec0Received, owner0Received, "collect fee must be less than total token0 received");
+        assertLt(feeRec1Received, owner1Received, "collect fee must be less than total token1 received");
+
+        INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
+            tokenId: tokenId, recipient: address(this), amount0Max: type(uint128).max, amount1Max: type(uint128).max
+        });
+        uint256 owner0BeforeSecondClaim = IERC20(token0).balanceOf(address(this));
+        uint256 owner1BeforeSecondClaim = IERC20(token1).balanceOf(address(this));
+        v3Protocol.claimAMMFees(abi.encode(collectParams));
+        assertEq(IERC20(token0).balanceOf(address(this)), owner0BeforeSecondClaim, "no fees left after full decrease");
+        assertEq(IERC20(token1).balanceOf(address(this)), owner1BeforeSecondClaim, "no fees left after full decrease");
+    }
+
+    function test_V3_DecreaseLiquidity_PartialDoesNotCollectAccruedFees() public {
+        uint256 tokenId = _mintV3PositionAndGetTokenId();
+
+        address token0 = mainnet.WETH < mainnet.USDC ? mainnet.WETH : mainnet.USDC;
+        address token1 = mainnet.WETH < mainnet.USDC ? mainnet.USDC : mainnet.WETH;
+
+        _swapOnPoolToAccruePositionFees(token0, token1);
+
+        uint256 liquidityBefore = v3Protocol.getLiquidity(abi.encode(tokenId));
+        uint128 liquidityToDecrease = uint128(liquidityBefore / 2);
+
+        uint256 owner0Before = IERC20(token0).balanceOf(address(this));
+        uint256 owner1Before = IERC20(token1).balanceOf(address(this));
+
+        INonfungiblePositionManager.DecreaseLiquidityParams memory decreaseParams =
+            INonfungiblePositionManager.DecreaseLiquidityParams({
+                tokenId: tokenId,
+                liquidity: liquidityToDecrease,
+                amount0Min: 0,
+                amount1Min: 0,
+                deadline: block.timestamp
             });
         v3Protocol.decreaseLiquidity(abi.encode(decreaseParams));
 
@@ -671,7 +780,7 @@ contract TestUniswapProtocolFork is Test {
         assertTrue(
             IERC20(token0).balanceOf(address(this)) > owner0AfterDecrease
                 || IERC20(token1).balanceOf(address(this)) > owner1AfterDecrease,
-            "accrued fees still collectible after decreaseLiquidity"
+            "accrued fees still collectible after partial decreaseLiquidity"
         );
     }
 

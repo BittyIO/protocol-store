@@ -143,15 +143,36 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
     function removeLiquidity(bytes memory data) external override onlyOwner {
         INonfungiblePositionManager.DecreaseLiquidityParams memory params =
             abi.decode(data, (INonfungiblePositionManager.DecreaseLiquidityParams));
-        INonfungiblePositionManager(positionManager).decreaseLiquidity(params);
-        _collectWithFee(params.tokenId, type(uint128).max, type(uint128).max);
+
+        _claimAMMFees(params.tokenId, type(uint128).max, type(uint128).max);
+
+        (,,,,,,, uint128 liquidity,,,,) = INonfungiblePositionManager(positionManager).positions(params.tokenId);
+        if (liquidity > 0) {
+            (uint256 amount0, uint256 amount1) = INonfungiblePositionManager(positionManager)
+                .decreaseLiquidity(
+                    INonfungiblePositionManager.DecreaseLiquidityParams({
+                        tokenId: params.tokenId,
+                        liquidity: liquidity,
+                        amount0Min: params.amount0Min,
+                        amount1Min: params.amount1Min,
+                        deadline: params.deadline
+                    })
+                );
+            _collectPrincipal(params.tokenId, uint128(amount0), uint128(amount1));
+        }
     }
 
     function decreaseLiquidity(bytes memory data) external override onlyOwner {
         INonfungiblePositionManager.DecreaseLiquidityParams memory params =
             abi.decode(data, (INonfungiblePositionManager.DecreaseLiquidityParams));
+
+        (,,,,,,, uint128 liquidity,,,,) = INonfungiblePositionManager(positionManager).positions(params.tokenId);
+        if (params.liquidity == liquidity) {
+            _claimAMMFees(params.tokenId, type(uint128).max, type(uint128).max);
+        }
+
         (uint256 amount0, uint256 amount1) = INonfungiblePositionManager(positionManager).decreaseLiquidity(params);
-        _collectWithFee(params.tokenId, uint128(amount0), uint128(amount1));
+        _collectPrincipal(params.tokenId, uint128(amount0), uint128(amount1));
     }
 
     /**
@@ -163,7 +184,7 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
     function claimAMMFees(bytes memory data) external override onlyOwner {
         INonfungiblePositionManager.CollectParams memory params =
             abi.decode(data, (INonfungiblePositionManager.CollectParams));
-        _collectWithFee(params.tokenId, params.amount0Max, params.amount1Max);
+        _claimAMMFees(params.tokenId, params.amount0Max, params.amount1Max);
     }
 
     function getLiquidity(bytes memory data) external view override returns (uint256) {
@@ -176,7 +197,7 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
         return IGuard(bittyGuard).isStableCoinRegistered(token);
     }
 
-    function _collectWithFee(uint256 tokenId, uint128 amount0Max, uint128 amount1Max) internal {
+    function _collectPrincipal(uint256 tokenId, uint128 amount0Max, uint128 amount1Max) internal {
         (,, address token0, address token1,,,,,,,,) = INonfungiblePositionManager(positionManager).positions(tokenId);
 
         (uint256 amount0, uint256 amount1) = INonfungiblePositionManager(positionManager)
@@ -186,10 +207,35 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
                 })
             );
 
-        _transferCollectedWithFee(token0, token1, amount0, amount1);
+        if (amount0 > 0) IERC20(token0).safeTransfer(msg.sender, amount0);
+        if (amount1 > 0) IERC20(token1).safeTransfer(msg.sender, amount1);
     }
 
-    function _transferCollectedWithFee(address token0, address token1, uint256 amount0, uint256 amount1) internal {
+    function _claimAMMFees(uint256 tokenId, uint128 amount0Max, uint128 amount1Max) internal {
+        (,, address token0, address token1,,,,,,, uint128 principalOwed0, uint128 principalOwed1) =
+            INonfungiblePositionManager(positionManager).positions(tokenId);
+
+        (uint256 amount0, uint256 amount1) = INonfungiblePositionManager(positionManager)
+            .collect(
+                INonfungiblePositionManager.CollectParams({
+                    tokenId: tokenId, recipient: address(this), amount0Max: amount0Max, amount1Max: amount1Max
+                })
+            );
+
+        uint256 principalCollected0 = amount0 < principalOwed0 ? amount0 : principalOwed0;
+        uint256 principalCollected1 = amount1 < principalOwed1 ? amount1 : principalOwed1;
+        uint256 feeAmount0 = amount0 - principalCollected0;
+        uint256 feeAmount1 = amount1 - principalCollected1;
+
+        if (principalCollected0 > 0) IERC20(token0).safeTransfer(msg.sender, principalCollected0);
+        if (principalCollected1 > 0) IERC20(token1).safeTransfer(msg.sender, principalCollected1);
+
+        _transferClaimedFeesWithCollectFee(token0, token1, feeAmount0, feeAmount1);
+    }
+
+    function _transferClaimedFeesWithCollectFee(address token0, address token1, uint256 amount0, uint256 amount1)
+        internal
+    {
         if (amount0 > 0) {
             uint256 fee0 = amount0 * COLLECT_FEE_BPS / 10_000;
             if (fee0 > 0) {
