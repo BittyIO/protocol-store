@@ -27,6 +27,8 @@ contract TestUniswapProtocolFork is Test {
     address internal constant FEE_RECIPIENT = 0x12EE2de7BF086388B1D560eb95e7191Edfab9823;
     uint256 internal constant SWAP_FEE_BPS = 20;
     uint256 internal constant COLLECT_FEE_BPS = 100;
+    // BMNR token has no pool in Uniswap V3 now
+    address internal constant NO_V3_POOL_TOKEN = 0x33483A58079b4225b10e57958Ca28ad7b9CDbAF7;
 
     function _assertFeeSplit(uint256 feeRecipientAmount, uint256 ownerAmount, uint256 feeBps) internal pure {
         if (feeRecipientAmount == 0 && ownerAmount == 0) {
@@ -251,6 +253,45 @@ contract TestUniswapProtocolFork is Test {
             IERC20(address(mainnet.USDT)).balanceOf(address(this)) - ownerBefore,
             SWAP_FEE_BPS
         );
+    }
+
+    function test_V3_Swap_RevertsWhenPoolDoesNotExist() public {
+        address tokenIn = NO_V3_POOL_TOKEN;
+        address tokenOut = address(mainnet.WETH);
+        uint24 fee = 3000;
+
+        address token0 = tokenIn < tokenOut ? tokenIn : tokenOut;
+        address token1 = tokenIn < tokenOut ? tokenOut : tokenIn;
+        address pool = IUniswapV3Factory(IUniswapV3Router(mainnet.UNISWAP_V3_ROUTER).factory())
+            .getPool(token0, token1, fee);
+        assertEq(pool, address(0), "pool must not exist for test token");
+
+        address[] memory path = new address[](2);
+        path[0] = tokenIn;
+        path[1] = tokenOut;
+
+        uint24[] memory fees = new uint24[](1);
+        fees[0] = fee;
+
+        bytes memory encodedPath = Path.encodePath(path, fees);
+        uint256 sellAmount = 1 ether;
+        bytes memory swapData = abi.encode(path[0], sellAmount, path[1], uint256(0), encodedPath);
+
+        uint256 tokenInBalanceBefore = IERC20(tokenIn).balanceOf(address(this));
+        uint256 tokenOutBalanceBefore = IERC20(tokenOut).balanceOf(address(this));
+        uint256 feeRecipientBalanceBefore = IERC20(tokenOut).balanceOf(FEE_RECIPIENT);
+        uint256 protocolTokenInBefore = IERC20(tokenIn).balanceOf(address(v3Protocol));
+
+        deal(tokenIn, address(this), sellAmount);
+        IERC20(tokenIn).safeApprove(address(v3Protocol), sellAmount);
+
+        vm.expectRevert();
+        v3Protocol.swap(swapData);
+
+        assertEq(IERC20(tokenIn).balanceOf(address(this)), tokenInBalanceBefore + sellAmount, "tokenIn returned");
+        assertEq(IERC20(tokenOut).balanceOf(address(this)), tokenOutBalanceBefore, "tokenOut unchanged");
+        assertEq(IERC20(tokenOut).balanceOf(FEE_RECIPIENT), feeRecipientBalanceBefore, "no output fee charged");
+        assertEq(IERC20(tokenIn).balanceOf(address(v3Protocol)), protocolTokenInBefore, "protocol holds no tokenIn");
     }
 
     // ============ Uniswap V3 AMM (addLiquidity / removeLiquidity / claimAMMFees / getLiquidity) ============
