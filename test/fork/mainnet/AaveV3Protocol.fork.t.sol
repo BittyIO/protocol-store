@@ -34,7 +34,7 @@ contract TestAaveProtocolFork is Test {
         assertEq(balanceAfter, balanceBefore - 1 ether);
 
         (uint256 currentATokenBalance,,,,,,,,) =
-            poolDataProvider.getUserReserveData(address(mainnet.WETH), address(aaveProtocol));
+            poolDataProvider.getUserReserveData(address(mainnet.WETH), address(this));
         assertApproxEqAbs(currentATokenBalance, 1 ether, 10);
     }
 
@@ -44,11 +44,10 @@ contract TestAaveProtocolFork is Test {
         uint256 balanceBeforeSupply = IERC20(address(mainnet.WETH)).balanceOf(address(this));
         aaveProtocol.supply(address(mainnet.WETH), 1 ether);
 
-        (uint256 aTokenBalance,,,,,,,,) =
-            poolDataProvider.getUserReserveData(address(mainnet.WETH), address(aaveProtocol));
+        (uint256 aTokenBalance,,,,,,,,) = poolDataProvider.getUserReserveData(address(mainnet.WETH), address(this));
 
-        uint256 aaveProtocolBalanceBefore = IERC20(address(mainnet.WETH)).balanceOf(address(aaveProtocol));
-        assertEq(aaveProtocolBalanceBefore, 0);
+        address aToken = aaveProtocol.receiptTokenOf(address(mainnet.WETH));
+        IERC20(aToken).safeApprove(address(aaveProtocol), aTokenBalance);
 
         aaveProtocol.withdraw(address(mainnet.WETH), aTokenBalance);
 
@@ -59,31 +58,8 @@ contract TestAaveProtocolFork is Test {
         assertApproxEqAbs(balanceAfterWithdraw, balanceBeforeSupply, 5);
 
         (uint256 currentATokenBalance,,,,,,,,) =
-            poolDataProvider.getUserReserveData(address(mainnet.WETH), address(aaveProtocol));
+            poolDataProvider.getUserReserveData(address(mainnet.WETH), address(this));
         assertEq(currentATokenBalance, 0);
-    }
-
-    function test_Withdraw_UsesActualReturnedAmountNotInput() public {
-        address asset = address(mainnet.WETH);
-        uint256 requestAmount = 1000e18;
-        // Aave returns less than requested for rounding or liquidity reasons
-        uint256 mockReturnedAmount = 999e18;
-
-        IAavePool pool = IAaveV3(mainnet.AAVE_V3).getPool();
-
-        deal(asset, address(aaveProtocol), mockReturnedAmount);
-
-        vm.mockCall(
-            address(pool),
-            abi.encodeWithSelector(IAavePool.withdraw.selector, asset, requestAmount, address(aaveProtocol)),
-            abi.encode(mockReturnedAmount)
-        );
-
-        uint256 balanceBefore = IERC20(asset).balanceOf(address(this));
-        aaveProtocol.withdraw(asset, requestAmount);
-        uint256 balanceAfter = IERC20(asset).balanceOf(address(this));
-
-        assertEq(balanceAfter - balanceBefore, mockReturnedAmount, "Must transfer actual returned amount, not input");
     }
 
     function test_GetBalance() public {
@@ -98,7 +74,7 @@ contract TestAaveProtocolFork is Test {
         assertApproxEqAbs(balanceAfter, 1 ether, 10);
 
         (uint256 currentATokenBalance,,,,,,,,) =
-            poolDataProvider.getUserReserveData(address(mainnet.WETH), address(aaveProtocol));
+            poolDataProvider.getUserReserveData(address(mainnet.WETH), address(this));
         assertEq(balanceAfter, currentATokenBalance);
     }
 

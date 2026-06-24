@@ -59,7 +59,7 @@ contract TestSkyV1ProtocolFork is Test {
         assertEq(usdc.balanceOf(address(this)), usdcBefore - STAKE_AMOUNT);
         assertEq(usdc.balanceOf(address(skyProtocol)), 0);
         assertEq(usds.balanceOf(address(skyProtocol)), 0);
-        assertGt(sUsds.balanceOf(address(skyProtocol)), sharesBefore);
+        assertGt(sUsds.balanceOf(address(this)), sharesBefore);
     }
 
     function test_Stake_ResetsApprovals() public {
@@ -101,6 +101,7 @@ contract TestSkyV1ProtocolFork is Test {
         usdc.safeApprove(address(skyProtocol), STAKE_AMOUNT);
         skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
 
+        IERC20(address(sUsds)).safeApprove(address(skyProtocol), type(uint256).max);
         uint256 stakedBalance = skyProtocol.getStakedBalance(mainnet.USDC);
         uint256 usdcBefore = usdc.balanceOf(address(this));
 
@@ -116,6 +117,7 @@ contract TestSkyV1ProtocolFork is Test {
         usdc.safeApprove(address(skyProtocol), STAKE_AMOUNT);
         skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
 
+        IERC20(address(sUsds)).safeApprove(address(skyProtocol), type(uint256).max);
         uint256 stakedBalance = skyProtocol.getStakedBalance(mainnet.USDC);
         skyProtocol.unstake(mainnet.USDC, stakedBalance);
 

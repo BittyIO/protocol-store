@@ -29,8 +29,7 @@ contract TestAaveV3ProtocolSepoliaFork is Test {
         aaveProtocol.supply(sepolia.AAVE_WETH, 1 ether);
 
         assertEq(IERC20(sepolia.AAVE_WETH).balanceOf(address(this)), balanceBefore - 1 ether);
-        (uint256 currentATokenBalance,,,,,,,,) =
-            poolDataProvider.getUserReserveData(sepolia.AAVE_WETH, address(aaveProtocol));
+        (uint256 currentATokenBalance,,,,,,,,) = poolDataProvider.getUserReserveData(sepolia.AAVE_WETH, address(this));
         assertApproxEqAbs(currentATokenBalance, 1 ether, 10);
     }
 
@@ -40,17 +39,18 @@ contract TestAaveV3ProtocolSepoliaFork is Test {
         uint256 balanceBeforeSupply = IERC20(sepolia.AAVE_WETH).balanceOf(address(this));
         aaveProtocol.supply(sepolia.AAVE_WETH, 1 ether);
 
-        (uint256 aTokenBalance,,,,,,,,) = poolDataProvider.getUserReserveData(sepolia.AAVE_WETH, address(aaveProtocol));
+        (uint256 aTokenBalance,,,,,,,,) = poolDataProvider.getUserReserveData(sepolia.AAVE_WETH, address(this));
 
         assertEq(IERC20(sepolia.AAVE_WETH).balanceOf(address(aaveProtocol)), 0);
 
+        address aToken = aaveProtocol.receiptTokenOf(sepolia.AAVE_WETH);
+        IERC20(aToken).safeApprove(address(aaveProtocol), aTokenBalance);
         aaveProtocol.withdraw(sepolia.AAVE_WETH, aTokenBalance);
 
         assertEq(IERC20(sepolia.AAVE_WETH).balanceOf(address(aaveProtocol)), 0);
         assertApproxEqAbs(IERC20(sepolia.AAVE_WETH).balanceOf(address(this)), balanceBeforeSupply, 5);
 
-        (uint256 currentATokenBalance,,,,,,,,) =
-            poolDataProvider.getUserReserveData(sepolia.AAVE_WETH, address(aaveProtocol));
+        (uint256 currentATokenBalance,,,,,,,,) = poolDataProvider.getUserReserveData(sepolia.AAVE_WETH, address(this));
         assertEq(currentATokenBalance, 0);
     }
 
@@ -64,8 +64,7 @@ contract TestAaveV3ProtocolSepoliaFork is Test {
         uint256 balanceAfter = aaveProtocol.getSuppliedBalance(sepolia.AAVE_WETH);
         assertApproxEqAbs(balanceAfter, 1 ether, 10);
 
-        (uint256 currentATokenBalance,,,,,,,,) =
-            poolDataProvider.getUserReserveData(sepolia.AAVE_WETH, address(aaveProtocol));
+        (uint256 currentATokenBalance,,,,,,,,) = poolDataProvider.getUserReserveData(sepolia.AAVE_WETH, address(this));
         assertEq(balanceAfter, currentATokenBalance);
     }
 

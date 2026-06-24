@@ -7,6 +7,7 @@ import {UniswapV3Protocol} from "protocol-contracts/src/protocols/UniswapV3Proto
 import {sepolia} from "../../../script/addresses.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {IERC721} from "openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
 import {Address} from "openzeppelin-contracts/contracts/utils/Address.sol";
 import {
     Path,
@@ -35,6 +36,7 @@ contract TestUniswapProtocolSepoliaFork is Test {
         );
         v3Protocol.initialize(address(this));
         vm.deal(address(v3Protocol), 0);
+        IERC721(sepolia.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER).setApprovalForAll(address(v3Protocol), true);
     }
 
     function test_Sepolia_V3_SwapWETHToUSDT() public {
@@ -126,12 +128,11 @@ contract TestUniswapProtocolSepoliaFork is Test {
 
         Vm.Log[] memory entries = vm.getRecordedLogs();
         address npm = sepolia.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER;
-        bytes32 toTopic = bytes32(uint256(uint160(address(v3Protocol))));
+        bytes32 toTopic = bytes32(uint256(uint160(address(this))));
         for (uint256 i = 0; i < entries.length; i++) {
             if (
                 entries[i].emitter == npm && entries[i].topics[0] == ERC721_TRANSFER_TOPIC
-                    && entries[i].topics[1] == bytes32(uint256(0)) && entries[i].topics[2] == toTopic
-                    && entries[i].topics.length > 3
+                    && entries[i].topics[2] == toTopic && entries[i].topics.length > 3
             ) {
                 tokenId = uint256(entries[i].topics[3]);
                 break;

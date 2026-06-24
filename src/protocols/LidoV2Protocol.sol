@@ -20,6 +20,8 @@ contract LidoV2Protocol is IStakingProtocol, Ownable, Initializable {
     IUnstETH public immutable unstETH;
     WETH public immutable weth;
 
+    mapping(address => address) public receiptTokenOf;
+
     constructor(address stETH_, address unstETH_, address weth_) {
         stETH = IStETH(stETH_);
         unstETH = IUnstETH(unstETH_);
@@ -41,7 +43,16 @@ contract LidoV2Protocol is IStakingProtocol, Ownable, Initializable {
         }
         IERC20(address(weth)).safeTransferFrom(msg.sender, address(this), amount);
         weth.withdraw(amount);
+        uint256 stETHBefore = stETH.balanceOf(address(this));
         stETH.submit{value: amount}(address(this));
+        uint256 stETHReceived = stETH.balanceOf(address(this)) - stETHBefore;
+
+        if (receiptTokenOf[asset] == address(0)) {
+            receiptTokenOf[asset] = address(stETH);
+        }
+        if (stETHReceived > 0) {
+            IERC20(address(stETH)).safeTransfer(msg.sender, stETHReceived);
+        }
     }
 
     /**
@@ -54,7 +65,7 @@ contract LidoV2Protocol is IStakingProtocol, Ownable, Initializable {
         if (asset != address(weth)) {
             revert InvalidAsset();
         }
-        return stETH.balanceOf(address(this));
+        return stETH.balanceOf(owner());
     }
 
     function getUnstakeRequestIds() external view override returns (uint256[] memory) {
@@ -65,15 +76,11 @@ contract LidoV2Protocol is IStakingProtocol, Ownable, Initializable {
         if (asset != address(weth)) {
             revert InvalidAsset();
         }
-        if (stETH.balanceOf(address(this)) < amount) {
-            revert UnstakeMoreThanStaked();
-        }
+        IERC20(address(stETH)).safeTransferFrom(msg.sender, address(this), amount);
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = amount;
         IERC20(address(stETH)).safeIncreaseAllowance(address(unstETH), amount);
         uint256[] memory requestIds = unstETH.requestWithdrawals(amounts, address(this));
-        uint256 remaining = IERC20(address(stETH)).allowance(address(this), address(unstETH));
-        if (remaining > 0) IERC20(address(stETH)).safeDecreaseAllowance(address(unstETH), remaining);
         _unstakeRequests.add(requestIds[0]);
     }
 

@@ -20,6 +20,8 @@ contract SkyV1Protocol is IStakingProtocol, Ownable, Initializable {
     ISUsds public immutable sUsds;
     IDssPsm public immutable psm;
 
+    mapping(address => address) public receiptTokenOf;
+
     constructor(address usdc_, address usds_, address sUsds_, address psm_) {
         usdc = IERC20(usdc_);
         usds = IERC20(usds_);
@@ -44,13 +46,17 @@ contract SkyV1Protocol is IStakingProtocol, Ownable, Initializable {
 
         usdc.safeIncreaseAllowance(address(psm), amount);
         uint256 usdsReceived = psm.sellGem(address(this), amount);
-        uint256 usdcAllowanceRemaining = usdc.allowance(address(this), address(psm));
-        if (usdcAllowanceRemaining > 0) usdc.safeDecreaseAllowance(address(psm), usdcAllowanceRemaining);
 
         usds.safeIncreaseAllowance(address(sUsds), usdsReceived);
         sUsds.deposit(usdsReceived, address(this));
-        uint256 usdsAllowanceRemaining = usds.allowance(address(this), address(sUsds));
-        if (usdsAllowanceRemaining > 0) usds.safeDecreaseAllowance(address(sUsds), usdsAllowanceRemaining);
+
+        if (receiptTokenOf[asset] == address(0)) {
+            receiptTokenOf[asset] = address(sUsds);
+        }
+        uint256 shares = sUsds.balanceOf(address(this));
+        if (shares > 0) {
+            IERC20(address(sUsds)).safeTransfer(msg.sender, shares);
+        }
     }
 
     /**
@@ -61,7 +67,7 @@ contract SkyV1Protocol is IStakingProtocol, Ownable, Initializable {
      */
     function getStakedBalance(address asset) external view override returns (uint256) {
         if (asset != address(usdc)) revert InvalidAsset();
-        uint256 shares = sUsds.balanceOf(address(this));
+        uint256 shares = sUsds.balanceOf(owner());
         if (shares == 0) return 0;
         uint256 usdsValue = sUsds.convertToAssets(shares);
         return usdsValue / GEM_CONVERSION_FACTOR;
@@ -82,12 +88,13 @@ contract SkyV1Protocol is IStakingProtocol, Ownable, Initializable {
             usdsNeeded = usdsNeeded + (usdsNeeded * tout) / WAD;
         }
 
+        uint256 sharesNeeded = sUsds.previewWithdraw(usdsNeeded);
+        IERC20(address(sUsds)).safeTransferFrom(msg.sender, address(this), sharesNeeded);
+
         sUsds.withdraw(usdsNeeded, address(this), address(this));
 
         usds.safeIncreaseAllowance(address(psm), usdsNeeded);
         psm.buyGem(msg.sender, amount);
-        uint256 remaining = usds.allowance(address(this), address(psm));
-        if (remaining > 0) usds.safeDecreaseAllowance(address(psm), remaining);
     }
 
     /**

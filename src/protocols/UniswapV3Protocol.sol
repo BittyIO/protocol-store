@@ -5,6 +5,7 @@ import {IAMMProtocol} from "../interfaces/IAMMProtocol.sol";
 import {IGuard} from "../interfaces/IGuard.sol";
 import {IUniswapV3Router, INonfungiblePositionManager} from "../libs/uniswap/v3/Uniswap.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {IERC721} from "openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Address} from "openzeppelin-contracts/contracts/utils/Address.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
@@ -101,7 +102,8 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
                 IERC20(params.token1).safeTransferFrom(msg.sender, address(this), params.amount1Desired);
                 IERC20(params.token1).safeApprove(positionManager, params.amount1Desired);
             }
-            (,, uint256 amount0Used, uint256 amount1Used) = INonfungiblePositionManager(positionManager).mint(params);
+            (uint256 tokenId,, uint256 amount0Used, uint256 amount1Used) =
+                INonfungiblePositionManager(positionManager).mint(params);
             if (params.token0 != address(0)) {
                 IERC20(params.token0).safeApprove(positionManager, 0);
                 uint256 leftover0 = params.amount0Desired - amount0Used;
@@ -112,6 +114,7 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
                 uint256 leftover1 = params.amount1Desired - amount1Used;
                 if (leftover1 > 0) IERC20(params.token1).safeTransfer(msg.sender, leftover1);
             }
+            IERC721(positionManager).transferFrom(address(this), msg.sender, tokenId);
         } else {
             INonfungiblePositionManager.IncreaseLiquidityParams memory params =
                 abi.decode(paramsEncoded, (INonfungiblePositionManager.IncreaseLiquidityParams));
@@ -144,6 +147,8 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
         INonfungiblePositionManager.DecreaseLiquidityParams memory params =
             abi.decode(data, (INonfungiblePositionManager.DecreaseLiquidityParams));
 
+        IERC721(positionManager).transferFrom(msg.sender, address(this), params.tokenId);
+
         _claimAMMFees(params.tokenId, type(uint128).max, type(uint128).max);
 
         (,,,,,,, uint128 liquidity,,,,) = INonfungiblePositionManager(positionManager).positions(params.tokenId);
@@ -160,11 +165,15 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
                 );
             _collectPrincipal(params.tokenId, uint128(amount0), uint128(amount1));
         }
+
+        IERC721(positionManager).transferFrom(address(this), msg.sender, params.tokenId);
     }
 
     function decreaseLiquidity(bytes memory data) external override onlyOwner {
         INonfungiblePositionManager.DecreaseLiquidityParams memory params =
             abi.decode(data, (INonfungiblePositionManager.DecreaseLiquidityParams));
+
+        IERC721(positionManager).transferFrom(msg.sender, address(this), params.tokenId);
 
         (,,,,,,, uint128 liquidity,,,,) = INonfungiblePositionManager(positionManager).positions(params.tokenId);
         if (params.liquidity == liquidity) {
@@ -173,6 +182,8 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
 
         (uint256 amount0, uint256 amount1) = INonfungiblePositionManager(positionManager).decreaseLiquidity(params);
         _collectPrincipal(params.tokenId, uint128(amount0), uint128(amount1));
+
+        IERC721(positionManager).transferFrom(address(this), msg.sender, params.tokenId);
     }
 
     /**
@@ -184,7 +195,10 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
     function claimAMMFees(bytes memory data) external override onlyOwner {
         INonfungiblePositionManager.CollectParams memory params =
             abi.decode(data, (INonfungiblePositionManager.CollectParams));
+
+        IERC721(positionManager).transferFrom(msg.sender, address(this), params.tokenId);
         _claimAMMFees(params.tokenId, params.amount0Max, params.amount1Max);
+        IERC721(positionManager).transferFrom(address(this), msg.sender, params.tokenId);
     }
 
     function getLiquidity(bytes memory data) external view override returns (uint256) {
