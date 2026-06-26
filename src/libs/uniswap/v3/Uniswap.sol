@@ -9,14 +9,20 @@ interface IUniswapV3Router {
         uint256 amountOutMinimum;
     }
 
+    struct ExactOutputParams {
+        bytes path; // reversed: output token → ... → input token
+        address recipient;
+        uint256 amountOut;
+        uint256 amountInMaximum;
+    }
+
     function factory() external view returns (address);
 
-    /// @notice Swaps `amountIn` of one token for as much as possible of another along the specified path
-    /// @dev Setting `amountIn` to 0 will cause the contract to look up its own balance,
-    /// and swap the entire amount, enabling contracts to send tokens before calling this function.
-    /// @param params The parameters necessary for the multi-hop swap, encoded as `ExactInputParams` in calldata
     /// @return amountOut The amount of the received token
     function exactInput(ExactInputParams calldata params) external payable returns (uint256 amountOut);
+
+    /// @return amountIn The amount of the input token spent
+    function exactOutput(ExactOutputParams calldata params) external payable returns (uint256 amountIn);
 }
 
 interface IUniswapV3Pool {

@@ -14,7 +14,14 @@ interface IAMMProtocol is IProtocol {
      * @param data The data for the swap.
      * @dev Only the asset manager can execute it.
      */
+    /// @notice Exact-input swap: sell exactly `sellAmount`, receive ≥ `buyAmountMin`.
+    /// @dev data = abi.encode(sellToken, sellAmount, buyToken, buyAmountMin, path)
     function swap(bytes memory data) external payable;
+
+    /// @notice Exact-output swap: receive exactly `buyAmount`, spend ≤ `sellAmountMax`.
+    /// @dev data = abi.encode(sellToken, sellAmountMax, buyToken, buyAmount, reversedPath)
+    ///      path must be in reverse order (buyToken → ... → sellToken) per Uniswap V3 exactOutput.
+    function swapExactOut(bytes memory data) external;
 
     /**
      * @notice Add liquidity to the AMM protocol.
