@@ -25,7 +25,7 @@ contract TestUniswapProtocolFork is Test {
 
     UniswapV3Protocol public v3Protocol;
 
-    address internal constant FEE_RECIPIENT = 0x12EE2de7BF086388B1D560eb95e7191Edfab9823;
+    address internal constant FEE_RECIPIENT = 0x03884f535c20aE9d1b98221a8a864052E804FAd6;
     uint256 internal constant SWAP_FEE_BPS = 20;
     uint256 internal constant COLLECT_FEE_BPS = 100;
     // BMNR token has no pool in Uniswap V3 now
@@ -264,8 +264,8 @@ contract TestUniswapProtocolFork is Test {
 
         address token0 = tokenIn < tokenOut ? tokenIn : tokenOut;
         address token1 = tokenIn < tokenOut ? tokenOut : tokenIn;
-        address pool = IUniswapV3Factory(IUniswapV3Router(mainnet.UNISWAP_V3_ROUTER).factory())
-            .getPool(token0, token1, fee);
+        address pool =
+            IUniswapV3Factory(IUniswapV3Router(mainnet.UNISWAP_V3_ROUTER).factory()).getPool(token0, token1, fee);
         assertEq(pool, address(0), "pool must not exist for test token");
 
         address[] memory path = new address[](2);

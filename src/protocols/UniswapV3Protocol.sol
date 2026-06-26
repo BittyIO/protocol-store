@@ -14,7 +14,7 @@ import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initia
 contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
     using SafeERC20 for IERC20;
 
-    address public constant FEE_RECIPIENT = 0x5bd59662E1ef41138581C1A8684B3610fC5fED44;
+    address public constant FEE_RECIPIENT = 0xF0cb89CD21c087C201914265503C65F72DA0d86a;
     uint256 private constant SWAP_FEE_BPS = 20; // 0.2%
     uint256 private constant COLLECT_FEE_BPS = 100; // 1%
 
@@ -86,6 +86,31 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
                 IERC20(tokenOut).safeTransfer(msg.sender, amountOut);
             }
         }
+    }
+
+    function swapExactOut(bytes memory data) external override onlyOwner {
+        (address tokenIn, uint256 amountInMaximum, address tokenOut, uint256 amountOut, bytes memory path) =
+            abi.decode(data, (address, uint256, address, uint256, bytes));
+
+        // Fee always from the sell token; deduct before routing so the vault receives exact buyAmount.
+        uint256 fee = amountInMaximum * SWAP_FEE_BPS / 10_000;
+        uint256 swapAmountInMaximum = amountInMaximum - fee;
+
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountInMaximum);
+        if (fee > 0) IERC20(tokenIn).safeTransfer(FEE_RECIPIENT, fee);
+        IERC20(tokenIn).safeApprove(router, swapAmountInMaximum);
+
+        IUniswapV3Router.ExactOutputParams memory params = IUniswapV3Router.ExactOutputParams({
+            path: path, recipient: address(this), amountOut: amountOut, amountInMaximum: swapAmountInMaximum
+        });
+
+        uint256 amountIn = IUniswapV3Router(router).exactOutput(params);
+        IERC20(tokenIn).safeApprove(router, 0);
+
+        uint256 leftover = swapAmountInMaximum - amountIn;
+        if (leftover > 0) IERC20(tokenIn).safeTransfer(msg.sender, leftover);
+
+        IERC20(tokenOut).safeTransfer(msg.sender, amountOut);
     }
 
     function addLiquidity(bytes memory data) external override onlyOwner {
