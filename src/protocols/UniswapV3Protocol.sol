@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IAMMProtocol} from "../interfaces/IAMMProtocol.sol";
-import {IGuard} from "../interfaces/IGuard.sol";
+import {IBittyV1AMMProtocol} from "../interfaces/IBittyV1AMMProtocol.sol";
+import {IBittyV1Guard} from "../interfaces/IBittyV1Guard.sol";
 import {IUniswapV3Router, INonfungiblePositionManager} from "../libs/uniswap/v3/Uniswap.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IERC721} from "openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
@@ -11,7 +11,7 @@ import {Address} from "openzeppelin-contracts/contracts/utils/Address.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
-contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
+contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
     using SafeERC20 for IERC20;
 
     address public constant FEE_RECIPIENT = 0xF0cb89CD21c087C201914265503C65F72DA0d86a;
@@ -22,7 +22,7 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
     address public immutable positionManager;
     address public immutable bittyGuard;
 
-    constructor(address router_, address positionManager_, address bittyGuard_) {
+    constructor(address router_, address positionManager_, address bittyGuard_) Ownable(msg.sender) {
         router = router_;
         positionManager = positionManager_;
         bittyGuard = bittyGuard_;
@@ -61,14 +61,14 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
 
         if (tokenIn != address(0)) {
             IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), swapAmountIn);
-            IERC20(tokenIn).safeApprove(router, swapAmountIn);
+            IERC20(tokenIn).forceApprove(router, swapAmountIn);
         }
 
         uint256 amountOut =
             IUniswapV3Router(router).exactInput{value: tokenIn == address(0) ? swapAmountIn : msg.value}(params);
 
         if (tokenIn != address(0)) {
-            IERC20(tokenIn).safeApprove(router, 0);
+            IERC20(tokenIn).forceApprove(router, 0);
         }
 
         if (address(this).balance != 0) {
@@ -98,14 +98,14 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
 
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountInMaximum);
         if (fee > 0) IERC20(tokenIn).safeTransfer(FEE_RECIPIENT, fee);
-        IERC20(tokenIn).safeApprove(router, swapAmountInMaximum);
+        IERC20(tokenIn).forceApprove(router, swapAmountInMaximum);
 
         IUniswapV3Router.ExactOutputParams memory params = IUniswapV3Router.ExactOutputParams({
             path: path, recipient: address(this), amountOut: amountOut, amountInMaximum: swapAmountInMaximum
         });
 
         uint256 amountIn = IUniswapV3Router(router).exactOutput(params);
-        IERC20(tokenIn).safeApprove(router, 0);
+        IERC20(tokenIn).forceApprove(router, 0);
 
         uint256 leftover = swapAmountInMaximum - amountIn;
         if (leftover > 0) IERC20(tokenIn).safeTransfer(msg.sender, leftover);
@@ -121,21 +121,21 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
             params.recipient = address(this);
             if (params.token0 != address(0)) {
                 IERC20(params.token0).safeTransferFrom(msg.sender, address(this), params.amount0Desired);
-                IERC20(params.token0).safeApprove(positionManager, params.amount0Desired);
+                IERC20(params.token0).forceApprove(positionManager, params.amount0Desired);
             }
             if (params.token1 != address(0)) {
                 IERC20(params.token1).safeTransferFrom(msg.sender, address(this), params.amount1Desired);
-                IERC20(params.token1).safeApprove(positionManager, params.amount1Desired);
+                IERC20(params.token1).forceApprove(positionManager, params.amount1Desired);
             }
             (uint256 tokenId,, uint256 amount0Used, uint256 amount1Used) =
                 INonfungiblePositionManager(positionManager).mint(params);
             if (params.token0 != address(0)) {
-                IERC20(params.token0).safeApprove(positionManager, 0);
+                IERC20(params.token0).forceApprove(positionManager, 0);
                 uint256 leftover0 = params.amount0Desired - amount0Used;
                 if (leftover0 > 0) IERC20(params.token0).safeTransfer(msg.sender, leftover0);
             }
             if (params.token1 != address(0)) {
-                IERC20(params.token1).safeApprove(positionManager, 0);
+                IERC20(params.token1).forceApprove(positionManager, 0);
                 uint256 leftover1 = params.amount1Desired - amount1Used;
                 if (leftover1 > 0) IERC20(params.token1).safeTransfer(msg.sender, leftover1);
             }
@@ -147,21 +147,21 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
                 INonfungiblePositionManager(positionManager).positions(params.tokenId);
             if (token0 != address(0)) {
                 IERC20(token0).safeTransferFrom(msg.sender, address(this), params.amount0Desired);
-                IERC20(token0).safeApprove(positionManager, params.amount0Desired);
+                IERC20(token0).forceApprove(positionManager, params.amount0Desired);
             }
             if (token1 != address(0)) {
                 IERC20(token1).safeTransferFrom(msg.sender, address(this), params.amount1Desired);
-                IERC20(token1).safeApprove(positionManager, params.amount1Desired);
+                IERC20(token1).forceApprove(positionManager, params.amount1Desired);
             }
             (, uint256 amount0Used, uint256 amount1Used) =
                 INonfungiblePositionManager(positionManager).increaseLiquidity(params);
             if (token0 != address(0)) {
-                IERC20(token0).safeApprove(positionManager, 0);
+                IERC20(token0).forceApprove(positionManager, 0);
                 uint256 leftover0 = params.amount0Desired - amount0Used;
                 if (leftover0 > 0) IERC20(token0).safeTransfer(msg.sender, leftover0);
             }
             if (token1 != address(0)) {
-                IERC20(token1).safeApprove(positionManager, 0);
+                IERC20(token1).forceApprove(positionManager, 0);
                 uint256 leftover1 = params.amount1Desired - amount1Used;
                 if (leftover1 > 0) IERC20(token1).safeTransfer(msg.sender, leftover1);
             }
@@ -233,7 +233,7 @@ contract UniswapV3Protocol is IAMMProtocol, Ownable, Initializable {
     }
 
     function _isStablecoin(address token) internal view returns (bool) {
-        return IGuard(bittyGuard).isStableCoinRegistered(token);
+        return IBittyV1Guard(bittyGuard).isStableCoinRegistered(token);
     }
 
     function _collectPrincipal(uint256 tokenId, uint128 amount0Max, uint128 amount1Max) internal {

@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IStakingProtocol, InvalidAsset, ClaimUnstakedNotSupported} from "../interfaces/IStakingProtocol.sol";
+import {
+    IBittyV1StakingProtocol,
+    InvalidAsset,
+    ClaimUnstakedNotSupported
+} from "../interfaces/IBittyV1StakingProtocol.sol";
 import {IDssPsm, ISUsds} from "../libs/sky/Sky.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
-contract SkyV1Protocol is IStakingProtocol, Ownable, Initializable {
+contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
     using SafeERC20 for IERC20;
 
     // USDC is 6 decimals, USDS is 18 decimals → multiply by 1e12 to convert
@@ -22,7 +26,7 @@ contract SkyV1Protocol is IStakingProtocol, Ownable, Initializable {
 
     mapping(address => address) public receiptTokenOf;
 
-    constructor(address usdc_, address usds_, address sUsds_, address psm_) {
+    constructor(address usdc_, address usds_, address sUsds_, address psm_) Ownable(msg.sender) {
         usdc = IERC20(usdc_);
         usds = IERC20(usds_);
         sUsds = ISUsds(sUsds_);

@@ -7,7 +7,7 @@ import {IDssPsm, ISUsds} from "protocol-contracts/src/libs/sky/Sky.sol";
 import {mainnet} from "../../../script/addresses.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-import {InvalidAsset, ClaimUnstakedNotSupported} from "protocol-contracts/src/interfaces/IStakingProtocol.sol";
+import {InvalidAsset, ClaimUnstakedNotSupported} from "protocol-contracts/src/interfaces/IBittyV1StakingProtocol.sol";
 
 contract TestSkyV1ProtocolFork is Test {
     using SafeERC20 for IERC20;
@@ -49,7 +49,7 @@ contract TestSkyV1ProtocolFork is Test {
 
     function test_Stake() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
-        usdc.safeApprove(address(skyProtocol), STAKE_AMOUNT);
+        usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
 
         uint256 usdcBefore = usdc.balanceOf(address(this));
         uint256 sharesBefore = sUsds.balanceOf(address(skyProtocol));
@@ -64,7 +64,7 @@ contract TestSkyV1ProtocolFork is Test {
 
     function test_Stake_ResetsApprovals() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
-        usdc.safeApprove(address(skyProtocol), STAKE_AMOUNT);
+        usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
         skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
 
         assertEq(usdc.allowance(address(skyProtocol), mainnet.SKY_PSM), 0);
@@ -73,7 +73,7 @@ contract TestSkyV1ProtocolFork is Test {
 
     function test_Stake_RevertOnWrongAsset() public {
         deal(mainnet.WETH, address(this), 1 ether);
-        IERC20(mainnet.WETH).safeApprove(address(skyProtocol), 1 ether);
+        IERC20(mainnet.WETH).forceApprove(address(skyProtocol), 1 ether);
         vm.expectRevert(InvalidAsset.selector);
         skyProtocol.stake(mainnet.WETH, 1 ether);
     }
@@ -84,7 +84,7 @@ contract TestSkyV1ProtocolFork is Test {
 
     function test_GetStakedBalance_AfterStake() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
-        usdc.safeApprove(address(skyProtocol), STAKE_AMOUNT);
+        usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
         skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
         uint256 balance = skyProtocol.getStakedBalance(mainnet.USDC);
         assertGt(balance, 0);
@@ -98,10 +98,10 @@ contract TestSkyV1ProtocolFork is Test {
 
     function test_Unstake() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
-        usdc.safeApprove(address(skyProtocol), STAKE_AMOUNT);
+        usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
         skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
 
-        IERC20(address(sUsds)).safeApprove(address(skyProtocol), type(uint256).max);
+        IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
         uint256 stakedBalance = skyProtocol.getStakedBalance(mainnet.USDC);
         uint256 usdcBefore = usdc.balanceOf(address(this));
 
@@ -114,10 +114,10 @@ contract TestSkyV1ProtocolFork is Test {
 
     function test_Unstake_ResetsApprovals() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
-        usdc.safeApprove(address(skyProtocol), STAKE_AMOUNT);
+        usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
         skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
 
-        IERC20(address(sUsds)).safeApprove(address(skyProtocol), type(uint256).max);
+        IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
         uint256 stakedBalance = skyProtocol.getStakedBalance(mainnet.USDC);
         skyProtocol.unstake(mainnet.USDC, stakedBalance);
 
@@ -140,7 +140,7 @@ contract TestSkyV1ProtocolFork is Test {
 
     function test_StakeUnstakeRoundTrip_YieldAccrues() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
-        usdc.safeApprove(address(skyProtocol), STAKE_AMOUNT);
+        usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
         skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
 
         vm.warp(block.timestamp + 365 days);

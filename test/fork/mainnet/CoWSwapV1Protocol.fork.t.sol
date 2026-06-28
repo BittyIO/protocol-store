@@ -6,7 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {CoWSwapV1Protocol} from "protocol-contracts/src/protocols/cowswap/CoWSwapV1Protocol.sol";
 import {SingleOrderHandlerV1} from "protocol-contracts/src/protocols/cowswap/SingleOrderHandlerV1.sol";
 import {IComposableCoW} from "protocol-contracts/src/libs/cow/IComposableCoW.sol";
-import {OrderNotExpired} from "protocol-contracts/src/interfaces/IIntentProtocol.sol";
+import {OrderNotExpired} from "protocol-contracts/src/interfaces/IBittyV1IntentProtocol.sol";
 import {mainnet} from "../../../script/addresses.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
@@ -68,7 +68,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
         uint32 validTo = uint32(block.timestamp + 3600);
 
         deal(address(mainnet.USDC), address(this), sellAmount);
-        IERC20(address(mainnet.USDC)).safeApprove(address(cowProtocol), sellAmount);
+        IERC20(address(mainnet.USDC)).forceApprove(address(cowProtocol), sellAmount);
         bytes32 h = _trade(sellAmount, 1e15, validTo, true);
 
         assertTrue(mockComposableCow.singleOrders(address(cowProtocol), h), "conditional order must be registered");
@@ -80,7 +80,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
         uint32 validTo = uint32(block.timestamp + 3600);
 
         deal(address(mainnet.USDC), address(this), sellAmount);
-        IERC20(address(mainnet.USDC)).safeApprove(address(cowProtocol), sellAmount);
+        IERC20(address(mainnet.USDC)).forceApprove(address(cowProtocol), sellAmount);
         _trade(sellAmount, 1e15, validTo, true);
 
         assertEq(
@@ -95,7 +95,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
         uint32 validTo = uint32(block.timestamp + 3600);
 
         deal(address(mainnet.USDC), address(this), sellAmount);
-        IERC20(address(mainnet.USDC)).safeApprove(address(cowProtocol), sellAmount);
+        IERC20(address(mainnet.USDC)).forceApprove(address(cowProtocol), sellAmount);
 
         vm.recordLogs();
         cowProtocol.trade(abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo));
@@ -117,7 +117,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
         uint32 validTo = uint32(block.timestamp + 3600);
 
         deal(address(mainnet.USDC), address(this), sellAmountMax);
-        IERC20(address(mainnet.USDC)).safeApprove(address(cowProtocol), sellAmountMax);
+        IERC20(address(mainnet.USDC)).forceApprove(address(cowProtocol), sellAmountMax);
 
         vm.recordLogs();
         cowProtocol.trade(
@@ -133,7 +133,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
         uint32 validTo = uint32(block.timestamp + 3600);
 
         deal(address(mainnet.USDC), address(this), sellAmount);
-        IERC20(address(mainnet.USDC)).safeApprove(address(cowProtocol), sellAmount);
+        IERC20(address(mainnet.USDC)).forceApprove(address(cowProtocol), sellAmount);
         bytes32 h = _trade(sellAmount, 1e15, validTo, true);
 
         cowProtocol.cancelTrade(abi.encode(h));
@@ -185,7 +185,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
         uint32 validTo = uint32(block.timestamp + 3600);
 
         deal(address(mainnet.USDC), address(this), sellAmount);
-        IERC20(address(mainnet.USDC)).safeApprove(address(cowProtocol), sellAmount);
+        IERC20(address(mainnet.USDC)).forceApprove(address(cowProtocol), sellAmount);
         bytes32 h = _trade(sellAmount, 1e15, validTo, true);
 
         assertTrue(cowProtocol.isOrderActive(h));
@@ -197,7 +197,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
 
     function _placeTrade(uint256 sellAmount, uint32 validTo) internal returns (bytes32 h) {
         deal(address(mainnet.USDC), address(this), sellAmount);
-        IERC20(address(mainnet.USDC)).safeApprove(address(cowProtocol), sellAmount);
+        IERC20(address(mainnet.USDC)).forceApprove(address(cowProtocol), sellAmount);
         return _trade(sellAmount, 1e15, validTo, true);
     }
 

@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {ILendingProtocol} from "../interfaces/ILendingProtocol.sol";
+import {IBittyV1LendingProtocol} from "../interfaces/IBittyV1LendingProtocol.sol";
 import {IAaveV3, IAavePool, IPoolDataProvider} from "../libs/aave/v3/Aave.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
-contract AaveV3Protocol is ILendingProtocol, Ownable, Initializable {
+contract AaveV3Protocol is IBittyV1LendingProtocol, Ownable, Initializable {
     using SafeERC20 for IERC20;
     address public immutable aaveV3;
     address public immutable poolDataProvider;
 
     mapping(address => address) public receiptTokenOf;
 
-    constructor(address aaveV3_, address poolDataProvider_) {
+    constructor(address aaveV3_, address poolDataProvider_) Ownable(msg.sender) {
         aaveV3 = aaveV3_;
         poolDataProvider = poolDataProvider_;
     }

@@ -55,7 +55,7 @@ contract TestUniswapProtocolSepoliaFork is Test {
 
         uint256 usdtBalanceBefore = IERC20(address(sepolia.USDT)).balanceOf(address(this));
         deal(address(sepolia.WETH9), address(this), sellAmount);
-        IERC20(address(sepolia.WETH9)).safeApprove(address(v3Protocol), sellAmount);
+        IERC20(address(sepolia.WETH9)).forceApprove(address(v3Protocol), sellAmount);
 
         v3Protocol.swap(swapData);
 
@@ -79,7 +79,7 @@ contract TestUniswapProtocolSepoliaFork is Test {
 
         uint256 wethBalanceBefore = IERC20(address(sepolia.WETH9)).balanceOf(address(this));
         deal(address(sepolia.USDT), address(this), sellAmount);
-        IERC20(address(sepolia.USDT)).safeApprove(address(v3Protocol), sellAmount);
+        IERC20(address(sepolia.USDT)).forceApprove(address(v3Protocol), sellAmount);
         v3Protocol.swap(swapData);
 
         uint256 wethBalanceAfter = IERC20(address(sepolia.WETH9)).balanceOf(address(this));
@@ -105,8 +105,8 @@ contract TestUniswapProtocolSepoliaFork is Test {
 
         deal(token0, address(this), amount0Desired);
         deal(token1, address(this), amount1Desired);
-        IERC20(token0).safeApprove(address(v3Protocol), amount0Desired);
-        IERC20(token1).safeApprove(address(v3Protocol), amount1Desired);
+        IERC20(token0).forceApprove(address(v3Protocol), amount0Desired);
+        IERC20(token1).forceApprove(address(v3Protocol), amount1Desired);
 
         INonfungiblePositionManager.MintParams memory mintParams = INonfungiblePositionManager.MintParams({
             token0: token0,

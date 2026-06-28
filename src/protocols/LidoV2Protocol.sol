@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IStakingProtocol, UnstakeMoreThanStaked, InvalidAsset} from "../interfaces/IStakingProtocol.sol";
+import {IBittyV1StakingProtocol, UnstakeMoreThanStaked, InvalidAsset} from "../interfaces/IBittyV1StakingProtocol.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
@@ -12,7 +12,7 @@ import {EnumerableSet} from "openzeppelin-contracts/contracts/utils/structs/Enum
 
 error WETHBalanceNotEnough();
 
-contract LidoV2Protocol is IStakingProtocol, Ownable, Initializable {
+contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.UintSet;
     EnumerableSet.UintSet private _unstakeRequests;
@@ -22,7 +22,7 @@ contract LidoV2Protocol is IStakingProtocol, Ownable, Initializable {
 
     mapping(address => address) public receiptTokenOf;
 
-    constructor(address stETH_, address unstETH_, address weth_) {
+    constructor(address stETH_, address unstETH_, address weth_) Ownable(msg.sender) {
         stETH = IStETH(stETH_);
         unstETH = IUnstETH(unstETH_);
         weth = WETH(payable(weth_));

@@ -23,7 +23,7 @@ contract TestAaveV3ProtocolSepoliaFork is Test {
 
     function test_Supply() public {
         deal(sepolia.AAVE_WETH, address(this), 1 ether);
-        IERC20(sepolia.AAVE_WETH).safeApprove(address(aaveProtocol), 1 ether);
+        IERC20(sepolia.AAVE_WETH).forceApprove(address(aaveProtocol), 1 ether);
         uint256 balanceBefore = IERC20(sepolia.AAVE_WETH).balanceOf(address(this));
 
         aaveProtocol.supply(sepolia.AAVE_WETH, 1 ether);
@@ -35,7 +35,7 @@ contract TestAaveV3ProtocolSepoliaFork is Test {
 
     function test_Withdraw() public {
         deal(sepolia.AAVE_WETH, address(this), 1 ether);
-        IERC20(sepolia.AAVE_WETH).safeApprove(address(aaveProtocol), 1 ether);
+        IERC20(sepolia.AAVE_WETH).forceApprove(address(aaveProtocol), 1 ether);
         uint256 balanceBeforeSupply = IERC20(sepolia.AAVE_WETH).balanceOf(address(this));
         aaveProtocol.supply(sepolia.AAVE_WETH, 1 ether);
 
@@ -44,7 +44,7 @@ contract TestAaveV3ProtocolSepoliaFork is Test {
         assertEq(IERC20(sepolia.AAVE_WETH).balanceOf(address(aaveProtocol)), 0);
 
         address aToken = aaveProtocol.receiptTokenOf(sepolia.AAVE_WETH);
-        IERC20(aToken).safeApprove(address(aaveProtocol), aTokenBalance);
+        IERC20(aToken).forceApprove(address(aaveProtocol), aTokenBalance);
         aaveProtocol.withdraw(sepolia.AAVE_WETH, aTokenBalance);
 
         assertEq(IERC20(sepolia.AAVE_WETH).balanceOf(address(aaveProtocol)), 0);
@@ -58,7 +58,7 @@ contract TestAaveV3ProtocolSepoliaFork is Test {
         assertEq(aaveProtocol.getSuppliedBalance(sepolia.AAVE_WETH), 0);
 
         deal(sepolia.AAVE_WETH, address(this), 1 ether);
-        IERC20(sepolia.AAVE_WETH).safeApprove(address(aaveProtocol), 1 ether);
+        IERC20(sepolia.AAVE_WETH).forceApprove(address(aaveProtocol), 1 ether);
         aaveProtocol.supply(sepolia.AAVE_WETH, 1 ether);
 
         uint256 balanceAfter = aaveProtocol.getSuppliedBalance(sepolia.AAVE_WETH);
@@ -70,7 +70,7 @@ contract TestAaveV3ProtocolSepoliaFork is Test {
 
     function test_Supply_ResetsApprovalToZero() public {
         deal(sepolia.AAVE_WETH, address(this), 1 ether);
-        IERC20(sepolia.AAVE_WETH).safeApprove(address(aaveProtocol), 1 ether);
+        IERC20(sepolia.AAVE_WETH).forceApprove(address(aaveProtocol), 1 ether);
         aaveProtocol.supply(sepolia.AAVE_WETH, 1 ether);
 
         address pool = address(IAaveV3(sepolia.AAVE_V3).getPool());

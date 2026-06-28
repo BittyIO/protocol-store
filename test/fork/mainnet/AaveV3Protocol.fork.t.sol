@@ -24,7 +24,7 @@ contract TestAaveProtocolFork is Test {
     }
 
     function test_Supply() public {
-        IERC20(address(mainnet.WETH)).safeApprove(address(aaveProtocol), 1 ether);
+        IERC20(address(mainnet.WETH)).forceApprove(address(aaveProtocol), 1 ether);
         deal(address(mainnet.WETH), address(this), 1 ether);
         uint256 balanceBefore = IERC20(address(mainnet.WETH)).balanceOf(address(this));
 
@@ -39,7 +39,7 @@ contract TestAaveProtocolFork is Test {
     }
 
     function test_Withdraw() public {
-        IERC20(address(mainnet.WETH)).safeApprove(address(aaveProtocol), 1 ether);
+        IERC20(address(mainnet.WETH)).forceApprove(address(aaveProtocol), 1 ether);
         deal(address(mainnet.WETH), address(this), 1 ether);
         uint256 balanceBeforeSupply = IERC20(address(mainnet.WETH)).balanceOf(address(this));
         aaveProtocol.supply(address(mainnet.WETH), 1 ether);
@@ -47,7 +47,7 @@ contract TestAaveProtocolFork is Test {
         (uint256 aTokenBalance,,,,,,,,) = poolDataProvider.getUserReserveData(address(mainnet.WETH), address(this));
 
         address aToken = aaveProtocol.receiptTokenOf(address(mainnet.WETH));
-        IERC20(aToken).safeApprove(address(aaveProtocol), aTokenBalance);
+        IERC20(aToken).forceApprove(address(aaveProtocol), aTokenBalance);
 
         aaveProtocol.withdraw(address(mainnet.WETH), aTokenBalance);
 
@@ -66,7 +66,7 @@ contract TestAaveProtocolFork is Test {
         uint256 balanceBefore = aaveProtocol.getSuppliedBalance(address(mainnet.WETH));
         assertEq(balanceBefore, 0);
 
-        IERC20(address(mainnet.WETH)).safeApprove(address(aaveProtocol), 1 ether);
+        IERC20(address(mainnet.WETH)).forceApprove(address(aaveProtocol), 1 ether);
         deal(address(mainnet.WETH), address(this), 1 ether);
         aaveProtocol.supply(address(mainnet.WETH), 1 ether);
 
@@ -80,7 +80,7 @@ contract TestAaveProtocolFork is Test {
 
     function test_Supply_ResetsApprovalToZero() public {
         deal(address(mainnet.WETH), address(this), 1 ether);
-        IERC20(address(mainnet.WETH)).safeApprove(address(aaveProtocol), 1 ether);
+        IERC20(address(mainnet.WETH)).forceApprove(address(aaveProtocol), 1 ether);
 
         aaveProtocol.supply(address(mainnet.WETH), 1 ether);
 
@@ -90,7 +90,7 @@ contract TestAaveProtocolFork is Test {
     }
 
     function test_SupplyMultipleAssets() public {
-        IERC20(address(mainnet.WETH)).safeApprove(address(aaveProtocol), 1 ether);
+        IERC20(address(mainnet.WETH)).forceApprove(address(aaveProtocol), 1 ether);
         deal(address(mainnet.WETH), address(this), 1 ether);
         aaveProtocol.supply(address(mainnet.WETH), 1 ether);
 
@@ -98,7 +98,7 @@ contract TestAaveProtocolFork is Test {
         assertApproxEqAbs(wethBalance, 1 ether, 10);
 
         deal(address(mainnet.USDC), address(this), 1000e6);
-        IERC20(address(mainnet.USDC)).safeApprove(address(aaveProtocol), 1000e6);
+        IERC20(address(mainnet.USDC)).forceApprove(address(aaveProtocol), 1000e6);
         aaveProtocol.supply(address(mainnet.USDC), 1000e6);
 
         uint256 usdcBalance = aaveProtocol.getSuppliedBalance(address(mainnet.USDC));

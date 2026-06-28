@@ -5,6 +5,8 @@ out = "out"
 libs = ["lib"]
 remappings = [
     "protocol-contracts/=./",
+    "forge-std/=lib/forge-std/src/",
+    "openzeppelin-contracts/=lib/openzeppelin-contracts/",
 ]
 solc_version = "0.8.34"
 memory_limit = 43554432

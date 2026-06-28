@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-interface ICoWTwap {
+interface IBittyV1CoWTwap {
     event LimitOrderCreated(bytes32 indexed conditionalOrderHash, address indexed owner);
     event TwapCreated(bytes32 indexed conditionalOrderHash, address indexed owner);
     event TwapCancelled(bytes32 indexed conditionalOrderHash, address indexed owner);

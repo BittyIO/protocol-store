@@ -96,7 +96,7 @@ contract TestUniswapProtocolFork is Test {
 
         uint256 usdtBalanceBefore = IERC20(address(mainnet.USDT)).balanceOf(address(this));
         deal(address(mainnet.WETH), address(this), sellAmount);
-        IERC20(address(mainnet.WETH)).safeApprove(address(v3Protocol), sellAmount);
+        IERC20(address(mainnet.WETH)).forceApprove(address(v3Protocol), sellAmount);
 
         v3Protocol.swap(swapData);
 
@@ -124,7 +124,7 @@ contract TestUniswapProtocolFork is Test {
 
         uint256 wethBalanceBefore = IERC20(address(mainnet.WETH)).balanceOf(address(this));
         deal(address(mainnet.USDC), address(this), sellAmount);
-        IERC20(address(mainnet.USDC)).safeApprove(address(v3Protocol), sellAmount);
+        IERC20(address(mainnet.USDC)).forceApprove(address(v3Protocol), sellAmount);
 
         v3Protocol.swap(swapData);
 
@@ -152,7 +152,7 @@ contract TestUniswapProtocolFork is Test {
 
         uint256 wethBalanceBefore = IERC20(address(mainnet.WETH)).balanceOf(address(this));
         deal(address(mainnet.USDT), address(this), sellAmount);
-        IERC20(address(mainnet.USDT)).safeApprove(address(v3Protocol), sellAmount);
+        IERC20(address(mainnet.USDT)).forceApprove(address(v3Protocol), sellAmount);
 
         v3Protocol.swap(swapData);
 
@@ -187,7 +187,7 @@ contract TestUniswapProtocolFork is Test {
 
         uint256 usdtBalanceBefore = IERC20(address(mainnet.USDT)).balanceOf(address(this));
         deal(address(mainnet.USDC), address(this), sellAmount);
-        IERC20(address(mainnet.USDC)).safeApprove(address(v3Protocol), sellAmount);
+        IERC20(address(mainnet.USDC)).forceApprove(address(v3Protocol), sellAmount);
 
         v3Protocol.swap(swapData);
 
@@ -216,7 +216,7 @@ contract TestUniswapProtocolFork is Test {
 
         uint256 feeRecipientBefore = IERC20(address(mainnet.USDC)).balanceOf(FEE_RECIPIENT);
         deal(address(mainnet.USDC), address(this), sellAmount);
-        IERC20(address(mainnet.USDC)).safeApprove(address(v3Protocol), sellAmount);
+        IERC20(address(mainnet.USDC)).forceApprove(address(v3Protocol), sellAmount);
 
         v3Protocol.swap(swapData);
 
@@ -246,7 +246,7 @@ contract TestUniswapProtocolFork is Test {
         uint256 feeRecipientBefore = IERC20(address(mainnet.USDT)).balanceOf(FEE_RECIPIENT);
         uint256 ownerBefore = IERC20(address(mainnet.USDT)).balanceOf(address(this));
         deal(address(mainnet.WETH), address(this), sellAmount);
-        IERC20(address(mainnet.WETH)).safeApprove(address(v3Protocol), sellAmount);
+        IERC20(address(mainnet.WETH)).forceApprove(address(v3Protocol), sellAmount);
 
         v3Protocol.swap(swapData);
 
@@ -285,7 +285,7 @@ contract TestUniswapProtocolFork is Test {
         uint256 protocolTokenInBefore = IERC20(tokenIn).balanceOf(address(v3Protocol));
 
         deal(tokenIn, address(this), sellAmount);
-        IERC20(tokenIn).safeApprove(address(v3Protocol), sellAmount);
+        IERC20(tokenIn).forceApprove(address(v3Protocol), sellAmount);
 
         vm.expectRevert();
         v3Protocol.swap(swapData);
@@ -317,8 +317,8 @@ contract TestUniswapProtocolFork is Test {
 
         deal(token0, address(this), amount0Desired);
         deal(token1, address(this), amount1Desired);
-        IERC20(token0).safeApprove(address(v3Protocol), amount0Desired);
-        IERC20(token1).safeApprove(address(v3Protocol), amount1Desired);
+        IERC20(token0).forceApprove(address(v3Protocol), amount0Desired);
+        IERC20(token1).forceApprove(address(v3Protocol), amount1Desired);
 
         INonfungiblePositionManager.MintParams memory mintParams = INonfungiblePositionManager.MintParams({
             token0: token0,
@@ -603,7 +603,7 @@ contract TestUniswapProtocolFork is Test {
         uint256 swapAmount = tokenIn == mainnet.WETH ? 2 ether : 5000 * 1e6;
 
         deal(tokenIn, address(this), swapAmount);
-        IERC20(tokenIn).safeApprove(mainnet.UNISWAP_V3_ROUTER, swapAmount);
+        IERC20(tokenIn).forceApprove(mainnet.UNISWAP_V3_ROUTER, swapAmount);
 
         IUniswapV3Router(mainnet.UNISWAP_V3_ROUTER)
             .exactInput(
@@ -630,8 +630,8 @@ contract TestUniswapProtocolFork is Test {
 
         deal(token0, address(this), amount0Desired);
         deal(token1, address(this), amount1Desired);
-        IERC20(token0).safeApprove(address(v3Protocol), amount0Desired);
-        IERC20(token1).safeApprove(address(v3Protocol), amount1Desired);
+        IERC20(token0).forceApprove(address(v3Protocol), amount0Desired);
+        IERC20(token1).forceApprove(address(v3Protocol), amount1Desired);
 
         uint256 balance0Before = IERC20(token0).balanceOf(address(this));
         uint256 balance1Before = IERC20(token1).balanceOf(address(this));
@@ -674,8 +674,8 @@ contract TestUniswapProtocolFork is Test {
 
         deal(token0, address(this), amount0Desired);
         deal(token1, address(this), amount1Desired);
-        IERC20(token0).safeApprove(address(v3Protocol), amount0Desired);
-        IERC20(token1).safeApprove(address(v3Protocol), amount1Desired);
+        IERC20(token0).forceApprove(address(v3Protocol), amount0Desired);
+        IERC20(token1).forceApprove(address(v3Protocol), amount1Desired);
 
         uint256 balance0Before = IERC20(token0).balanceOf(address(this));
         uint256 balance1Before = IERC20(token1).balanceOf(address(this));

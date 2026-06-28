@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IProtocol} from "./IProtocol.sol";
+import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
 
 /**
- * @title IAMMProtocol
+ * @title IBittyV1AMMProtocol
  * @notice Interface for AMM (swap and liquidity) protocols.
  */
-interface IAMMProtocol is IProtocol {
+interface IBittyV1AMMProtocol is IBittyV1Protocol {
     /**
      * @notice Swap tokens on the AMM protocol.
      * @dev Swap tokens on the AMM protocol.

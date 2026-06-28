@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IIntentProtocol, OrderNotExpired} from "../../interfaces/IIntentProtocol.sol";
-import {ICoWTwap} from "../../interfaces/ICoWTwap.sol";
+import {IBittyV1IntentProtocol, OrderNotExpired} from "../../interfaces/IBittyV1IntentProtocol.sol";
+import {IBittyV1CoWTwap} from "../../interfaces/IBittyV1CoWTwap.sol";
 import {IGPv2Settlement} from "../../libs/cow/IGPv2Settlement.sol";
 import {GPv2Order} from "../../libs/cow/GPv2Order.sol";
 import {IERC1271} from "../../libs/cow/IERC1271.sol";
@@ -23,7 +23,7 @@ import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initia
  *         Both use the same Composable CoW lifecycle:
  *           create → watchdog submits each slot → cancel or cleanExpiredOrders to reclaim tokens
  */
-contract CoWSwapV1Protocol is IIntentProtocol, ICoWTwap, IERC1271, Ownable, Initializable {
+contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IBittyV1CoWTwap, IERC1271, Ownable, Initializable {
     using SafeERC20 for IERC20;
 
     struct TWAPData {
@@ -65,7 +65,7 @@ contract CoWSwapV1Protocol is IIntentProtocol, ICoWTwap, IERC1271, Ownable, Init
         address composableCow_,
         address twapHandler_,
         address singleOrderHandler_
-    ) {
+    ) Ownable(msg.sender) {
         settlement = IGPv2Settlement(settlement_);
         vaultRelayer = vaultRelayer_;
         composableCow = IComposableCoW(composableCow_);
@@ -223,7 +223,7 @@ contract CoWSwapV1Protocol is IIntentProtocol, ICoWTwap, IERC1271, Ownable, Init
     function isValidSignature(bytes32 hash, bytes memory signature)
         external
         view
-        override(IERC1271, IIntentProtocol)
+        override(IERC1271, IBittyV1IntentProtocol)
         returns (bytes4)
     {
         if (signature.length == 0) return 0xffffffff;

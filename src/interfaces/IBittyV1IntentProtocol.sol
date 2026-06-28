@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IProtocol} from "./IProtocol.sol";
+import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
 
 error OrderNotExpired();
 
-interface IIntentProtocol is IProtocol {
+interface IBittyV1IntentProtocol is IBittyV1Protocol {
     event Trade(bytes data, address indexed sender, address indexed protocol);
     event CancelTrade(bytes data, address indexed sender, address indexed protocol);
 

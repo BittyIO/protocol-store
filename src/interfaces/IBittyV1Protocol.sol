@@ -2,11 +2,11 @@
 pragma solidity ^0.8.34;
 
 /**
- * @title IProtocol
+ * @title IBittyV1Protocol
  * @notice Interface for all protocols.
  * @dev This interface is used to initialize the protocol.
  */
-interface IProtocol {
+interface IBittyV1Protocol {
     /**
      * @notice Initialize the protocol.
      * @param newOwner The address of the new owner.

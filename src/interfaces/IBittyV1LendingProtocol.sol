@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IProtocol} from "./IProtocol.sol";
+import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
 
-interface ILendingProtocol is IProtocol {
+interface IBittyV1LendingProtocol is IBittyV1Protocol {
     /**
      * @notice Supply the asset to the lending protocol.
      * @dev Supply the asset to the lending protocol.

@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IProtocol} from "./IProtocol.sol";
+import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
 
 error UnstakeMoreThanStaked();
 error InvalidAsset();
 error ClaimUnstakedNotSupported();
 
 /**
- * @title IStakingProtocol
+ * @title IBittyV1StakingProtocol
  * @notice Interface for staking protocols.
  * @dev This interface is used to stake and unstake the asset.
  */
-interface IStakingProtocol is IProtocol {
+interface IBittyV1StakingProtocol is IBittyV1Protocol {
     /**
      * @notice Stake the asset to the staking protocol.
      * @dev Stake the asset to the staking protocol.
