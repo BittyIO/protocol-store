@@ -14,7 +14,7 @@ import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initia
 contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
     using SafeERC20 for IERC20;
 
-    address public constant FEE_RECIPIENT = 0xc377432D0D28f3f689245D4aE7C58385bF31b590;
+    address public constant FEE_RECIPIENT = 0xF0cb89CD21c087C201914265503C65F72DA0d86a;
     uint256 private constant SWAP_FEE_BPS = 20; // 0.2%
     uint256 private constant COLLECT_FEE_BPS = 100; // 1%
 
