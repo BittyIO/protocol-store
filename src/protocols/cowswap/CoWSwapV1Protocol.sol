@@ -4,7 +4,6 @@ pragma solidity ^0.8.34;
 import {IBittyV1IntentProtocol} from "../../interfaces/IBittyV1IntentProtocol.sol";
 import {IGPv2Settlement} from "../../libs/cow/IGPv2Settlement.sol";
 import {GPv2Order} from "../../libs/cow/GPv2Order.sol";
-import {IComposableCoW} from "../../libs/cow/IComposableCoW.sol";
 import {IERC1271} from "../../libs/cow/IERC1271.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
@@ -12,59 +11,51 @@ import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initia
 
 /**
  * @title CoWSwapV1Protocol
- * @notice CoW Swap intent protocol — pure order-instruction builder.
+ * @notice CoW Swap intent protocol — order-instruction builder and on-chain order registry.
  *
- *         Implements IBittyV1IntentProtocol. Returns OrderInstructions that tell the vault:
- *           - registerTarget/registerCalldata: call composableCow.create() in vault context
- *             so the order is registered under the vault's address.
- *           - approveTarget: grant the vaultRelayer allowance of sellAmount.
- *         The vault never needs to know about CoW internals.
+ *         Implements IBittyV1IntentProtocol. Returns OrderInstructions that tell the vault to:
+ *           - registerTarget/registerCalldata: call registerOrder() or registerTwap() on this clone
+ *             (owner-only), storing the order in activeOrders or twapOrders.
+ *           - approveTarget: grant the vaultRelayer allowance for sellAmount.
  *
- *         isValidSignature() validates CoW order signatures using composableCow.isValidSafeSignature()
- *         with owner() (vault) as the "safe", enabling the vault's generic isValidSignature() loop.
+ *         After on-chain registration, the asset manager posts the order to the CoW API off-chain
+ *         with signingScheme=eip1271. isValidSignature() validates against the on-chain registry.
  *
- *         Single limit orders  → SingleOrderHandlerV1 (KIND_SELL or KIND_BUY)
- *         TWAP orders          → CoW TWAP handler (n equal slots)
- *         Approach 2 (one active TWAP per sell token) is enforced by AssetManagerLogic.
+ *         Single limit orders  → activeOrders[hash] = validTo
+ *         TWAP orders          → twapOrders[id]; current part hash computed on-the-fly each window
  */
 contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initializable {
-    struct TWAPData {
-        IERC20 sellToken;
-        IERC20 buyToken;
-        address receiver;
-        uint256 partSellAmount;
-        uint256 minPartLimit;
-        uint256 t0;
-        uint256 n;
-        uint256 t;
-        uint256 span;
-        bytes32 appData;
+    struct TwapParams {
+        address sellToken;
+        address buyToken;
+        uint256 sellAmountPerPart;
+        uint256 buyAmountMinPerPart;
+        uint32 startTime;
+        uint32 partDuration;
+        uint32 span; // execution window per part; 0 = full partDuration
+        uint32 n; // total number of parts
     }
 
     bytes4 private constant MAGICVALUE = 0x1626ba7e;
     uint32 private constant DEFAULT_VALID_TO_OFFSET = 3600;
 
-    // keccak256('{"appCode":"BittyVault","metadata":{"partnerFee":{"bps":20,"recipient":"0x87C841A0fc4a64B15a7aFc13bC34F837722899aC"}},"version":"1.3.0"}')
-    bytes32 public constant APP_DATA = 0x3014c5b08c479e0b12c8766ca87baa1d4ecc8da027f70600d2f93d06737e07a3;
+    // ── Limit order registry ──────────────────────────────────────────────────
+    // orderHash → validTo; 0 = not registered
+    mapping(bytes32 => uint256) public activeOrders;
+
+    // ── TWAP order registry ───────────────────────────────────────────────────
+    mapping(bytes32 => TwapParams) public twapOrders;
+    bytes32[] private _activeTwapIds;
+
+    // keccak256('{"appCode":"BittyVault","metadata":{"partnerFee":{"bps":20,"recipient":"0x12EE2de7BF086388B1D560eb95e7191Edfab9823"}},"version":"1.3.0"}')
+    bytes32 public constant APP_DATA = 0xdd81467643ffa93587d2dcaa8d583d5d953920b659e6c8f7235c8d613f737693;
 
     IGPv2Settlement public immutable settlement;
     address public immutable vaultRelayer;
-    IComposableCoW public immutable composableCow;
-    address public immutable twapHandler;
-    address public immutable singleOrderHandler;
 
-    constructor(
-        address settlement_,
-        address vaultRelayer_,
-        address composableCow_,
-        address twapHandler_,
-        address singleOrderHandler_
-    ) Ownable(msg.sender) {
+    constructor(address settlement_, address vaultRelayer_) Ownable(msg.sender) {
         settlement = IGPv2Settlement(settlement_);
         vaultRelayer = vaultRelayer_;
-        composableCow = IComposableCoW(composableCow_);
-        twapHandler = twapHandler_;
-        singleOrderHandler = singleOrderHandler_;
     }
 
     function initialize(address newOwner) external override initializer {
@@ -77,8 +68,9 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
 
     /**
      * @notice Build registration instructions for a single limit order.
-     *         The vault will call composableCow.create() in its own context (registering the order
-     *         under the vault's address) and approve vaultRelayer for sellAmount.
+     *         The vault approves the vaultRelayer and calls registerOrder() on this clone,
+     *         storing the GPv2Order hash in activeOrders. The order is then posted off-chain
+     *         to the CoW API with signingScheme=eip1271. No composableCow involvement.
      * @param data abi.encode(sellToken, sellAmount, buyToken, buyAmountMin[, validTo[, isSellOrder]])
      */
     function buildLimitOrderInstructions(bytes memory data)
@@ -111,23 +103,33 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
             buyTokenBalance: GPv2Order.BALANCE_ERC20
         });
 
-        bytes32 salt = keccak256(abi.encodePacked(block.timestamp, block.prevrandao, owner(), sellToken_, buyToken));
-        IComposableCoW.ConditionalOrderParams memory params = IComposableCoW.ConditionalOrderParams({
-            handler: singleOrderHandler, salt: salt, staticInput: abi.encode(order)
-        });
+        bytes32 orderHash = GPv2Order.hash(order, settlement.domainSeparator());
 
         instructions = IBittyV1IntentProtocol.OrderInstructions({
-            orderId: composableCow.hash(params),
+            orderId: orderHash,
             sellToken: sellToken_,
             sellAmount: sellAmount_,
             approveTarget: vaultRelayer,
-            registerTarget: address(composableCow),
-            registerCalldata: abi.encodeCall(IComposableCoW.create, (params, true))
+            registerTarget: address(this),
+            registerCalldata: abi.encodeCall(this.registerOrder, (orderHash, validTo))
         });
+    }
+
+    // ============ Order registry ============
+
+    function registerOrder(bytes32 orderHash, uint256 validTo) external onlyOwner {
+        activeOrders[orderHash] = validTo;
+    }
+
+    function deregisterOrder(bytes32 orderHash) external onlyOwner {
+        delete activeOrders[orderHash];
     }
 
     /**
      * @notice Build registration instructions for a TWAP order.
+     *         Each of the n parts is a fixed sell-amount GPv2 order valid only within its time window.
+     *         Part i is executable from (startTime + i*partDuration) to (partStart + effectiveSpan).
+     *         After registration the caller must post each part to CoW API at the start of its window.
      * @param data abi.encode(sellToken, totalSellAmount, buyToken, minPartLimit, n, partDuration, span)
      */
     function buildTwapInstructions(bytes memory data)
@@ -139,46 +141,62 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
         (
             address sellToken_,
             uint256 totalSellAmount_,
-            address buyToken,
+            address buyToken_,
             uint256 minPartLimit,
             uint256 n,
-            uint256 partDuration,
-            uint256 span
+            uint256 partDuration_,
+            uint256 span_
         ) = abi.decode(data, (address, uint256, address, uint256, uint256, uint256, uint256));
 
-        TWAPData memory twapData = TWAPData({
-            sellToken: IERC20(sellToken_),
-            buyToken: IERC20(buyToken),
-            receiver: owner(),
-            partSellAmount: totalSellAmount_ / n,
-            minPartLimit: minPartLimit,
-            t0: block.timestamp,
-            n: n,
-            t: partDuration,
-            span: span,
-            appData: APP_DATA
+        uint256 sellAmountPerPart = totalSellAmount_ / n;
+
+        TwapParams memory params = TwapParams({
+            sellToken: sellToken_,
+            buyToken: buyToken_,
+            sellAmountPerPart: sellAmountPerPart,
+            buyAmountMinPerPart: minPartLimit,
+            startTime: uint32(block.timestamp),
+            partDuration: uint32(partDuration_),
+            span: uint32(span_),
+            n: uint32(n)
         });
 
-        bytes32 salt = keccak256(abi.encodePacked(block.timestamp, block.prevrandao, owner(), sellToken_));
-        IComposableCoW.ConditionalOrderParams memory params = IComposableCoW.ConditionalOrderParams({
-            handler: twapHandler, salt: salt, staticInput: abi.encode(twapData)
-        });
+        bytes32 twapId = keccak256(abi.encode(params, owner()));
+
+        expiresAt = block.timestamp + n * partDuration_;
 
         instructions = IBittyV1IntentProtocol.OrderInstructions({
-            orderId: composableCow.hash(params),
+            orderId: twapId,
             sellToken: sellToken_,
             sellAmount: totalSellAmount_,
             approveTarget: vaultRelayer,
-            registerTarget: address(composableCow),
-            registerCalldata: abi.encodeCall(IComposableCoW.create, (params, true))
+            registerTarget: address(this),
+            registerCalldata: abi.encodeCall(this.registerTwap, (twapId, params))
         });
-        expiresAt = block.timestamp + n * partDuration;
+    }
+
+    // ============ TWAP registry ============
+
+    function registerTwap(bytes32 twapId, TwapParams calldata params) external onlyOwner {
+        twapOrders[twapId] = params;
+        _activeTwapIds.push(twapId);
+    }
+
+    function deregisterTwap(bytes32 twapId) external onlyOwner {
+        delete twapOrders[twapId];
+        uint256 len = _activeTwapIds.length;
+        for (uint256 i = 0; i < len; i++) {
+            if (_activeTwapIds[i] == twapId) {
+                _activeTwapIds[i] = _activeTwapIds[len - 1];
+                _activeTwapIds.pop();
+                break;
+            }
+        }
     }
 
     /**
      * @notice Build cancel instructions for a limit order or TWAP.
-     *         The vault will call composableCow.remove() in its own context and revoke
-     *         the vaultRelayer allowance.
+     *         Routes to deregisterTwap() for TWAP orders, deregisterOrder() for limit orders.
      */
     function buildCancelInstructions(bytes32 orderId)
         external
@@ -186,44 +204,101 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
         override
         returns (IBittyV1IntentProtocol.CancelInstructions memory instructions)
     {
+        bytes memory calldata_ = twapOrders[orderId].n != 0
+            ? abi.encodeCall(this.deregisterTwap, (orderId))
+            : abi.encodeCall(this.deregisterOrder, (orderId));
+
         instructions = IBittyV1IntentProtocol.CancelInstructions({
-            cancelTarget: address(composableCow),
-            cancelCalldata: abi.encodeCall(IComposableCoW.remove, (orderId)),
-            approveTarget: vaultRelayer
+            cancelTarget: address(this), cancelCalldata: calldata_, approveTarget: vaultRelayer
         });
     }
 
     // ============ EIP-1271 ============
 
     /**
-     * @notice Validates CoW order signatures for orders registered under the vault (owner()).
-     *         Called by vault.isValidSignature() as part of the generic intent protocol loop.
+     * @notice Validates a CoW order hash against the on-chain registry.
+     *         Checks limit orders (activeOrders) and the current part of each active TWAP.
+     *         The signature bytes are unused — security is guaranteed by the registry; only
+     *         the vault (owner) can write to it via registerOrder() / registerTwap().
      */
-    function isValidSignature(bytes32 hash, bytes memory signature)
+    function isValidSignature(bytes32 hash, bytes memory)
         external
         view
         override(IERC1271, IBittyV1IntentProtocol)
         returns (bytes4)
     {
-        if (signature.length == 0) return 0xffffffff;
-        try composableCow.isValidSafeSignature(
-            owner(), msg.sender, hash, settlement.domainSeparator(), bytes32(0), bytes(""), signature
-        ) returns (
-            bytes4 result
-        ) {
-            return result;
-        } catch {
-            return 0xffffffff;
+        // Limit orders
+        uint256 validTo = activeOrders[hash];
+        if (validTo != 0 && block.timestamp <= validTo) return 0x1626ba7e;
+
+        // TWAP — check if hash matches the current part of any active TWAP
+        uint256 len = _activeTwapIds.length;
+        for (uint256 i = 0; i < len; i++) {
+            bytes32 partHash = _computeCurrentTwapPartHash(twapOrders[_activeTwapIds[i]]);
+            if (partHash != bytes32(0) && partHash == hash) return 0x1626ba7e;
         }
+
+        return 0xffffffff;
     }
 
     // ============ View ============
 
-    function isOrderActive(bytes32 conditionalOrderHash) external view returns (bool) {
-        return composableCow.singleOrders(owner(), conditionalOrderHash);
+    function isOrderActive(bytes32 orderHash) external view returns (bool) {
+        uint256 validTo = activeOrders[orderHash];
+        if (validTo != 0 && block.timestamp <= validTo) return true;
+        uint256 len = _activeTwapIds.length;
+        for (uint256 i = 0; i < len; i++) {
+            bytes32 partHash = _computeCurrentTwapPartHash(twapOrders[_activeTwapIds[i]]);
+            if (partHash == orderHash) return true;
+        }
+        return false;
+    }
+
+    function isTwapActive(bytes32 twapId) external view returns (bool) {
+        TwapParams memory p = twapOrders[twapId];
+        if (p.n == 0) return false;
+        return block.timestamp >= p.startTime
+            && block.timestamp < uint256(p.startTime) + uint256(p.n) * uint256(p.partDuration);
+    }
+
+    function getCurrentTwapPartHash(bytes32 twapId) external view returns (bytes32) {
+        return _computeCurrentTwapPartHash(twapOrders[twapId]);
+    }
+
+    function activeTwapIds() external view returns (bytes32[] memory) {
+        return _activeTwapIds;
     }
 
     // ============ Internal ============
+
+    function _computeCurrentTwapPartHash(TwapParams memory p) internal view returns (bytes32) {
+        if (p.n == 0 || block.timestamp < p.startTime) return bytes32(0);
+        uint256 elapsed = block.timestamp - p.startTime;
+        uint256 partIndex = elapsed / p.partDuration;
+        if (partIndex >= p.n) return bytes32(0);
+
+        uint32 effectiveSpan = p.span > 0 ? p.span : p.partDuration;
+        uint32 partStart = p.startTime + uint32(partIndex) * p.partDuration;
+        uint32 partEnd = partStart + effectiveSpan;
+        if (block.timestamp > partEnd) return bytes32(0);
+
+        GPv2Order.Data memory order = GPv2Order.Data({
+            sellToken: IERC20(p.sellToken),
+            buyToken: IERC20(p.buyToken),
+            receiver: owner(),
+            sellAmount: p.sellAmountPerPart,
+            buyAmount: p.buyAmountMinPerPart,
+            validTo: partEnd,
+            appData: APP_DATA,
+            feeAmount: 0,
+            kind: GPv2Order.KIND_SELL,
+            partiallyFillable: false,
+            sellTokenBalance: GPv2Order.BALANCE_ERC20,
+            buyTokenBalance: GPv2Order.BALANCE_ERC20
+        });
+
+        return GPv2Order.hash(order, settlement.domainSeparator());
+    }
 
     function _decodeSwapData(bytes memory data)
         internal

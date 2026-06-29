@@ -2,224 +2,294 @@
 pragma solidity ^0.8.34;
 
 import {Test} from "forge-std/Test.sol";
-import {Vm} from "forge-std/Vm.sol";
 import {CoWSwapV1Protocol} from "protocol-contracts/src/protocols/cowswap/CoWSwapV1Protocol.sol";
-import {SingleOrderHandlerV1} from "protocol-contracts/src/protocols/cowswap/SingleOrderHandlerV1.sol";
-import {IComposableCoW} from "protocol-contracts/src/libs/cow/IComposableCoW.sol";
-import {OrderNotExpired} from "protocol-contracts/src/interfaces/IBittyV1IntentProtocol.sol";
+import {IBittyV1IntentProtocol} from "protocol-contracts/src/interfaces/IBittyV1IntentProtocol.sol";
+import {GPv2Order} from "protocol-contracts/src/libs/cow/GPv2Order.sol";
+import {IGPv2Settlement} from "protocol-contracts/src/libs/cow/IGPv2Settlement.sol";
 import {mainnet} from "../../../script/addresses.sol";
-import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
-contract MockComposableCoW {
-    mapping(address => mapping(bytes32 => bool)) public singleOrders;
-
-    function create(IComposableCoW.ConditionalOrderParams calldata params, bool) external {
-        singleOrders[msg.sender][hash(params)] = true;
-    }
-
-    function remove(bytes32 orderHash) external {
-        singleOrders[msg.sender][orderHash] = false;
-    }
-
-    function hash(IComposableCoW.ConditionalOrderParams calldata params) public pure returns (bytes32) {
-        return keccak256(abi.encode(params));
-    }
-
-    function isValidSafeSignature(address, address, bytes32, bytes32, bytes32, bytes calldata, bytes calldata)
-        external
-        pure
-        returns (bytes4)
-    {
-        return 0x1626ba7e;
-    }
-}
-
 contract TestCoWSwapV1ProtocolFork is Test {
-    using SafeERC20 for IERC20;
+    CoWSwapV1Protocol public protocol;
 
-    CoWSwapV1Protocol public cowProtocol;
-    SingleOrderHandlerV1 public singleHandler;
-    MockComposableCoW public mockComposableCow;
+    address constant VAULT = address(0x1234567890123456789012345678901234567890);
 
     function setUp() public {
         vm.createSelectFork("mainnet");
-        singleHandler = new SingleOrderHandlerV1();
-        mockComposableCow = new MockComposableCoW();
-        cowProtocol = new CoWSwapV1Protocol(
-            mainnet.COW_SETTLEMENT,
-            mainnet.COW_VAULT_RELAYER,
-            address(mockComposableCow),
-            mainnet.TWAP_HANDLER,
-            address(singleHandler)
-        );
-        cowProtocol.initialize(address(this));
+        protocol = new CoWSwapV1Protocol(mainnet.COW_SETTLEMENT, mainnet.COW_VAULT_RELAYER);
+        protocol.initialize(VAULT);
     }
 
     function test_Initialize() public view {
-        assertEq(cowProtocol.owner(), address(this));
-        assertEq(address(cowProtocol.settlement()), mainnet.COW_SETTLEMENT);
-        assertEq(cowProtocol.vaultRelayer(), mainnet.COW_VAULT_RELAYER);
-        assertEq(cowProtocol.singleOrderHandler(), address(singleHandler));
+        assertEq(protocol.owner(), VAULT);
+        assertEq(address(protocol.settlement()), mainnet.COW_SETTLEMENT);
+        assertEq(protocol.vaultRelayer(), mainnet.COW_VAULT_RELAYER);
     }
 
-    function test_Trade_RegistersConditionalOrder() public {
-        uint256 sellAmount = 1000 * 1e6;
-        uint32 validTo = uint32(block.timestamp + 3600);
-
-        deal(address(mainnet.USDC), address(this), sellAmount);
-        IERC20(address(mainnet.USDC)).forceApprove(address(cowProtocol), sellAmount);
-        bytes32 h = _trade(sellAmount, 1e15, validTo, true);
-
-        assertTrue(mockComposableCow.singleOrders(address(cowProtocol), h), "conditional order must be registered");
-        assertEq(IERC20(address(mainnet.USDC)).balanceOf(address(cowProtocol)), sellAmount, "tokens must be in clone");
-    }
-
-    function test_Trade_VaultRelayerAllowancePersists() public {
-        uint256 sellAmount = 1000 * 1e6;
-        uint32 validTo = uint32(block.timestamp + 3600);
-
-        deal(address(mainnet.USDC), address(this), sellAmount);
-        IERC20(address(mainnet.USDC)).forceApprove(address(cowProtocol), sellAmount);
-        _trade(sellAmount, 1e15, validTo, true);
-
-        assertEq(
-            IERC20(address(mainnet.USDC)).allowance(address(cowProtocol), cowProtocol.vaultRelayer()),
-            sellAmount,
-            "vault relayer allowance must persist for async settlement"
-        );
-    }
-
-    function test_Trade_EmitsLimitOrderCreated() public {
-        uint256 sellAmount = 1000 * 1e6;
-        uint32 validTo = uint32(block.timestamp + 3600);
-
-        deal(address(mainnet.USDC), address(this), sellAmount);
-        IERC20(address(mainnet.USDC)).forceApprove(address(cowProtocol), sellAmount);
-
-        vm.recordLogs();
-        cowProtocol.trade(abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo));
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-
-        bool found = false;
-        for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].topics[0] == keccak256("LimitOrderCreated(bytes32,address)")) {
-                found = true;
-                break;
-            }
-        }
-        assertTrue(found, "LimitOrderCreated event must be emitted");
-    }
-
-    function test_Trade_BuyOrder_RegistersConditionalOrder() public {
-        uint256 sellAmountMax = 5000 * 1e6;
-        uint256 buyAmount = 1e18;
-        uint32 validTo = uint32(block.timestamp + 3600);
-
-        deal(address(mainnet.USDC), address(this), sellAmountMax);
-        IERC20(address(mainnet.USDC)).forceApprove(address(cowProtocol), sellAmountMax);
-
-        vm.recordLogs();
-        cowProtocol.trade(
-            abi.encode(address(mainnet.USDC), sellAmountMax, address(mainnet.WETH), buyAmount, validTo, false)
-        );
-        bytes32 h = _parseLimitOrderHash();
-
-        assertTrue(mockComposableCow.singleOrders(address(cowProtocol), h), "buy order must be registered");
-    }
-
-    function test_CancelTrade_RemovesConditionalOrderAndReturnsFunds() public {
-        uint256 sellAmount = 1000 * 1e6;
-        uint32 validTo = uint32(block.timestamp + 3600);
-
-        deal(address(mainnet.USDC), address(this), sellAmount);
-        IERC20(address(mainnet.USDC)).forceApprove(address(cowProtocol), sellAmount);
-        bytes32 h = _trade(sellAmount, 1e15, validTo, true);
-
-        cowProtocol.cancelTrade(abi.encode(h));
-
-        assertFalse(mockComposableCow.singleOrders(address(cowProtocol), h), "conditional order must be removed");
-        assertEq(
-            IERC20(address(mainnet.USDC)).allowance(address(cowProtocol), cowProtocol.vaultRelayer()),
-            0,
-            "vault relayer allowance must be zero after cancel"
-        );
-        assertEq(IERC20(address(mainnet.USDC)).balanceOf(address(cowProtocol)), 0, "clone must hold no tokens");
-        assertEq(IERC20(address(mainnet.USDC)).balanceOf(address(this)), sellAmount, "tokens returned to vault");
-    }
-
-    function test_CleanExpiredOrders_RevertsIfNotExpired() public {
-        uint32 validTo = uint32(block.timestamp + 3600);
-        bytes32 h = _placeTrade(1000e6, validTo);
-
-        bytes32[] memory hashes = new bytes32[](1);
-        hashes[0] = h;
-        vm.expectRevert(OrderNotExpired.selector);
-        cowProtocol.cleanExpiredOrders(hashes);
-    }
-
-    function test_CleanExpiredOrders_PermissionlessAfterExpiry() public {
+    function test_BuildLimitOrderInstructions_SellOrder() public view {
         uint256 sellAmount = 1000e6;
         uint32 validTo = uint32(block.timestamp + 3600);
-        bytes32 h = _placeTrade(sellAmount, validTo);
+        bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
 
-        vm.warp(validTo + 1);
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
 
-        bytes32[] memory hashes = new bytes32[](1);
-        hashes[0] = h;
-        vm.prank(address(0xdead));
-        cowProtocol.cleanExpiredOrders(hashes);
-
-        assertFalse(mockComposableCow.singleOrders(address(cowProtocol), h), "order must be removed");
-        assertEq(
-            IERC20(address(mainnet.USDC)).allowance(address(cowProtocol), cowProtocol.vaultRelayer()),
-            0,
-            "allowance must be 0 after clean"
-        );
-        assertEq(IERC20(address(mainnet.USDC)).balanceOf(address(cowProtocol)), 0, "clone must hold no tokens");
-        assertEq(IERC20(address(mainnet.USDC)).balanceOf(address(this)), sellAmount, "tokens returned to vault");
+        assertEq(instr.sellToken, address(mainnet.USDC));
+        assertEq(instr.sellAmount, sellAmount);
+        assertEq(instr.approveTarget, mainnet.COW_VAULT_RELAYER);
+        assertEq(instr.registerTarget, address(protocol));
+        assertTrue(instr.orderId != bytes32(0));
+        assertTrue(instr.registerCalldata.length > 0);
     }
 
-    function test_IsOrderActive_TrueAfterTrade_FalseAfterCancel() public {
-        uint256 sellAmount = 1000 * 1e6;
+    function test_BuildLimitOrderInstructions_BuyOrder() public view {
+        uint256 buyAmount = 1e18;
+        uint256 sellAmountMax = 5000e6;
         uint32 validTo = uint32(block.timestamp + 3600);
+        bytes memory data =
+            abi.encode(address(mainnet.USDC), sellAmountMax, address(mainnet.WETH), buyAmount, validTo, false);
 
-        deal(address(mainnet.USDC), address(this), sellAmount);
-        IERC20(address(mainnet.USDC)).forceApprove(address(cowProtocol), sellAmount);
-        bytes32 h = _trade(sellAmount, 1e15, validTo, true);
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
 
-        assertTrue(cowProtocol.isOrderActive(h));
-        cowProtocol.cancelTrade(abi.encode(h));
-        assertFalse(cowProtocol.isOrderActive(h));
+        assertEq(instr.sellToken, address(mainnet.USDC));
+        assertEq(instr.sellAmount, sellAmountMax);
+        assertEq(instr.approveTarget, mainnet.COW_VAULT_RELAYER);
+        assertEq(instr.registerTarget, address(protocol));
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
+    function test_BuildCancelInstructions_ReturnsDeregisterOrder() public view {
+        bytes32 orderId = keccak256("test-order");
+        IBittyV1IntentProtocol.CancelInstructions memory instr = protocol.buildCancelInstructions(orderId);
 
-    function _placeTrade(uint256 sellAmount, uint32 validTo) internal returns (bytes32 h) {
-        deal(address(mainnet.USDC), address(this), sellAmount);
-        IERC20(address(mainnet.USDC)).forceApprove(address(cowProtocol), sellAmount);
-        return _trade(sellAmount, 1e15, validTo, true);
+        assertEq(instr.cancelTarget, address(protocol));
+        bytes memory expected = abi.encodeWithSignature("deregisterOrder(bytes32)", orderId);
+        assertEq(instr.cancelCalldata, expected);
     }
 
-    function _trade(uint256 sellAmount, uint256 buyAmountMin, uint32 validTo, bool isSellOrder)
-        internal
-        returns (bytes32)
-    {
-        vm.recordLogs();
-        cowProtocol.trade(
-            abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), buyAmountMin, validTo, isSellOrder)
+    function test_IsOrderActive_TrueAfterRegister_FalseAfterDeregister() public {
+        uint256 sellAmount = 1000e6;
+        uint32 validTo = uint32(block.timestamp + 3600);
+        bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
+
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
+
+        // Simulate vault registering the order via registerCalldata
+        vm.prank(VAULT);
+        (bool ok,) = address(protocol).call(instr.registerCalldata);
+        assertTrue(ok);
+
+        assertTrue(protocol.isOrderActive(instr.orderId), "order must be active after register");
+
+        // Simulate vault cancelling
+        IBittyV1IntentProtocol.CancelInstructions memory cancel = protocol.buildCancelInstructions(instr.orderId);
+        vm.prank(VAULT);
+        (ok,) = address(protocol).call(cancel.cancelCalldata);
+        assertTrue(ok);
+
+        assertFalse(protocol.isOrderActive(instr.orderId), "order must be inactive after deregister");
+    }
+
+    function test_IsOrderActive_FalseAfterExpiry() public {
+        uint256 sellAmount = 1000e6;
+        uint32 validTo = uint32(block.timestamp + 3600);
+        bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
+
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
+
+        vm.prank(VAULT);
+        (bool ok,) = address(protocol).call(instr.registerCalldata);
+        assertTrue(ok);
+
+        vm.warp(block.timestamp + 3601);
+        assertFalse(protocol.isOrderActive(instr.orderId), "order must be inactive after expiry");
+    }
+
+    function test_IsValidSignature_ValidOrder_ReturnsMagic() public {
+        uint256 sellAmount = 1000e6;
+        uint32 validTo = uint32(block.timestamp + 3600);
+        bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
+
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
+
+        vm.prank(VAULT);
+        (bool ok,) = address(protocol).call(instr.registerCalldata);
+        assertTrue(ok);
+
+        bytes4 result = protocol.isValidSignature(instr.orderId, "");
+        assertEq(result, bytes4(0x1626ba7e), "must return ERC-1271 magic value");
+    }
+
+    function test_IsValidSignature_WrongHash_ReturnsInvalid() public {
+        uint256 sellAmount = 1000e6;
+        uint32 validTo = uint32(block.timestamp + 3600);
+        bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
+
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
+
+        vm.prank(VAULT);
+        (bool ok,) = address(protocol).call(instr.registerCalldata);
+        assertTrue(ok);
+
+        bytes4 result = protocol.isValidSignature(keccak256("wrong hash"), "");
+        assertEq(result, bytes4(0xffffffff), "must return invalid for wrong hash");
+    }
+
+    function test_IsValidSignature_UnregisteredOrder_ReturnsInvalid() public {
+        uint256 sellAmount = 1000e6;
+        uint32 validTo = uint32(block.timestamp + 3600);
+        bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
+
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
+        // Do NOT register the order
+
+        bytes4 result = protocol.isValidSignature(instr.orderId, "");
+        assertEq(result, bytes4(0xffffffff), "must return invalid for unregistered order");
+    }
+
+    function test_IsValidSignature_ExpiredOrder_ReturnsInvalid() public {
+        uint256 sellAmount = 1000e6;
+        uint32 validTo = uint32(block.timestamp + 3600);
+        bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
+
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
+
+        vm.prank(VAULT);
+        (bool ok,) = address(protocol).call(instr.registerCalldata);
+        assertTrue(ok);
+
+        vm.warp(block.timestamp + 3601);
+        bytes4 result = protocol.isValidSignature(instr.orderId, "");
+        assertEq(result, bytes4(0xffffffff), "must return invalid for expired order");
+    }
+
+    // ============ TWAP tests ============
+
+    function _buildTwapData(uint256 n, uint256 partDuration, uint256 span) internal view returns (bytes memory) {
+        return abi.encode(
+            address(mainnet.USDC), // sellToken
+            uint256(1000e6) * n, // totalSellAmount
+            address(mainnet.WETH), // buyToken
+            uint256(1e14), // minPartLimit
+            n,
+            partDuration,
+            span
         );
-        return _parseLimitOrderHash();
     }
 
-    function _parseLimitOrderHash() internal returns (bytes32) {
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 sig = keccak256("LimitOrderCreated(bytes32,address)");
-        for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].topics[0] == sig) {
-                return logs[i].topics[1];
-            }
-        }
-        revert("LimitOrderCreated event not found");
+    function test_BuildTwapInstructions_StoresParams() public {
+        bytes memory data = _buildTwapData(4, 3600, 0);
+        (IBittyV1IntentProtocol.OrderInstructions memory instr, uint256 expiresAt) =
+            protocol.buildTwapInstructions(data);
+
+        assertEq(instr.sellToken, address(mainnet.USDC));
+        assertEq(instr.sellAmount, 4000e6);
+        assertEq(instr.approveTarget, mainnet.COW_VAULT_RELAYER);
+        assertEq(instr.registerTarget, address(protocol));
+        assertTrue(instr.orderId != bytes32(0));
+        assertApproxEqAbs(expiresAt, block.timestamp + 4 * 3600, 5);
+
+        // Register and verify stored
+        vm.prank(VAULT);
+        (bool ok,) = address(protocol).call(instr.registerCalldata);
+        assertTrue(ok);
+
+        assertTrue(protocol.isTwapActive(instr.orderId));
+    }
+
+    function test_TwapIsValidSignature_InWindow_ReturnsMagic() public {
+        uint256 partDuration = 3600;
+        bytes memory data = _buildTwapData(3, partDuration, 0);
+        (IBittyV1IntentProtocol.OrderInstructions memory instr,) = protocol.buildTwapInstructions(data);
+
+        vm.prank(VAULT);
+        (bool ok,) = address(protocol).call(instr.registerCalldata);
+        assertTrue(ok);
+
+        // Get the current part hash
+        bytes32 partHash = protocol.getCurrentTwapPartHash(instr.orderId);
+        assertTrue(partHash != bytes32(0), "should have a valid part hash");
+
+        bytes4 result = protocol.isValidSignature(partHash, "");
+        assertEq(result, bytes4(0x1626ba7e), "must return magic for current TWAP part");
+    }
+
+    function test_TwapIsValidSignature_BetweenWindows_ReturnsInvalid() public {
+        uint256 partDuration = 3600;
+        uint256 span = 1800; // half the slot is the execution window
+        bytes memory data = _buildTwapData(3, partDuration, span);
+        (IBittyV1IntentProtocol.OrderInstructions memory instr,) = protocol.buildTwapInstructions(data);
+
+        vm.prank(VAULT);
+        (bool ok,) = address(protocol).call(instr.registerCalldata);
+        assertTrue(ok);
+
+        bytes32 partHash = protocol.getCurrentTwapPartHash(instr.orderId);
+
+        // Warp past the span (still within partDuration, but outside execution window)
+        vm.warp(block.timestamp + span + 1);
+
+        bytes4 result = protocol.isValidSignature(partHash, "");
+        assertEq(result, bytes4(0xffffffff), "must return invalid between execution windows");
+    }
+
+    function test_TwapIsValidSignature_NextWindow_NewHash() public {
+        uint256 partDuration = 3600;
+        bytes memory data = _buildTwapData(3, partDuration, 0);
+        (IBittyV1IntentProtocol.OrderInstructions memory instr,) = protocol.buildTwapInstructions(data);
+
+        vm.prank(VAULT);
+        (bool ok,) = address(protocol).call(instr.registerCalldata);
+        assertTrue(ok);
+
+        bytes32 part0Hash = protocol.getCurrentTwapPartHash(instr.orderId);
+
+        // Advance to part 1
+        vm.warp(block.timestamp + partDuration + 1);
+        bytes32 part1Hash = protocol.getCurrentTwapPartHash(instr.orderId);
+
+        assertFalse(part0Hash == part1Hash, "parts must have different hashes");
+        assertEq(protocol.isValidSignature(part0Hash, ""), bytes4(0xffffffff), "part 0 invalid in window 1");
+        assertEq(protocol.isValidSignature(part1Hash, ""), bytes4(0x1626ba7e), "part 1 valid in window 1");
+    }
+
+    function test_TwapIsValidSignature_AfterAllParts_ReturnsInvalid() public {
+        uint256 n = 2;
+        uint256 partDuration = 3600;
+        bytes memory data = _buildTwapData(n, partDuration, 0);
+        (IBittyV1IntentProtocol.OrderInstructions memory instr,) = protocol.buildTwapInstructions(data);
+
+        vm.prank(VAULT);
+        (bool ok,) = address(protocol).call(instr.registerCalldata);
+        assertTrue(ok);
+
+        bytes32 partHash = protocol.getCurrentTwapPartHash(instr.orderId);
+
+        // Warp past all parts
+        vm.warp(block.timestamp + n * partDuration + 1);
+
+        assertFalse(protocol.isTwapActive(instr.orderId));
+        assertEq(protocol.isValidSignature(partHash, ""), bytes4(0xffffffff));
+    }
+
+    function test_BuildCancelInstructions_TwapRoutesToDeregisterTwap() public {
+        bytes memory data = _buildTwapData(3, 3600, 0);
+        (IBittyV1IntentProtocol.OrderInstructions memory instr,) = protocol.buildTwapInstructions(data);
+
+        vm.prank(VAULT);
+        (bool ok,) = address(protocol).call(instr.registerCalldata);
+        assertTrue(ok);
+
+        IBittyV1IntentProtocol.CancelInstructions memory cancel = protocol.buildCancelInstructions(instr.orderId);
+
+        assertEq(cancel.cancelTarget, address(protocol));
+        bytes memory expected = abi.encodeWithSignature("deregisterTwap(bytes32)", instr.orderId);
+        assertEq(cancel.cancelCalldata, expected);
+
+        // Execute cancel
+        vm.prank(VAULT);
+        (ok,) = address(protocol).call(cancel.cancelCalldata);
+        assertTrue(ok);
+
+        assertFalse(protocol.isTwapActive(instr.orderId));
+        assertEq(protocol.activeTwapIds().length, 0);
     }
 }

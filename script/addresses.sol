@@ -28,10 +28,8 @@ library mainnet {
     // CoW Swap Protocol
     address public constant COW_SETTLEMENT = 0x9008D19f58AAbD9eD0D60971565AA8510560ab41;
     address public constant COW_VAULT_RELAYER = 0xC92E8bdf79f0507f65a392b0ab4667716BFE0110;
-    address public constant COMPOSABLE_COW = 0xFdafc9D1902F4e0B84f65f49f244B32B31573496;
-    address public constant TWAP_HANDLER = 0x6cF1e9cA41f7611dEf408122793c358a3d11E5a5;
 
-    address public constant BITTY_GUARD = 0x00000000455E105788ddD4D34113Fdbac1a37f88;
+    address public constant BITTY_GUARD = 0x0000000042E68648a8Bdce1Bb5f4CfACeaA8CC6D;
 }
 
 /// @dev Sepolia addresses parallel to `mainnet` for fork tests on Sepolia.
@@ -58,9 +56,7 @@ library sepolia {
     // CoW Swap Protocol — same address on all chains (deterministic deployment)
     address public constant COW_SETTLEMENT = 0x9008D19f58AAbD9eD0D60971565AA8510560ab41;
     address public constant COW_VAULT_RELAYER = 0xC92E8bdf79f0507f65a392b0ab4667716BFE0110;
-    address public constant COMPOSABLE_COW = 0xFdafc9D1902F4e0B84f65f49f244B32B31573496;
-    address public constant TWAP_HANDLER = 0x6cF1e9cA41f7611dEf408122793c358a3d11E5a5;
 
-    address public constant BITTY_GUARD = 0x00000000455E105788ddD4D34113Fdbac1a37f88;
+    address public constant BITTY_GUARD = 0x0000000042E68648a8Bdce1Bb5f4CfACeaA8CC6D;
 }
 
