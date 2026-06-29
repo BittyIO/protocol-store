@@ -25,7 +25,7 @@ contract TestUniswapProtocolFork is Test {
 
     UniswapV3Protocol public v3Protocol;
 
-    address internal constant FEE_RECIPIENT = 0x03884f535c20aE9d1b98221a8a864052E804FAd6;
+    address internal constant FEE_RECIPIENT = 0xc377432D0D28f3f689245D4aE7C58385bF31b590;
     uint256 internal constant SWAP_FEE_BPS = 20;
     uint256 internal constant COLLECT_FEE_BPS = 100;
     // BMNR token has no pool in Uniswap V3 now
