@@ -47,8 +47,8 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
     mapping(bytes32 => TwapParams) public twapOrders;
     bytes32[] private _activeTwapIds;
 
-    // keccak256('{"appCode":"BittyVault","metadata":{"partnerFee":{"bps":20,"recipient":"0x12EE2de7BF086388B1D560eb95e7191Edfab9823"}},"version":"1.3.0"}')
-    bytes32 public constant APP_DATA = 0xdd81467643ffa93587d2dcaa8d583d5d953920b659e6c8f7235c8d613f737693;
+    // keccak256('{"appCode":"BittyVault","metadata":{"partnerFee":{"bps":20,"recipient":"0x045B5Df8787f29C73C219C498aF82A0f9A466f3C"}},"version":"1.3.0"}')
+    bytes32 public constant APP_DATA = 0x55686c154390bb62e22611f4f22216460ab507093a75e86de0fc446c9149416f;
 
     IGPv2Settlement public immutable settlement;
     address public immutable vaultRelayer;
