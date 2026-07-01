@@ -38,12 +38,11 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
 
     bytes4 private constant MAGICVALUE = 0x1626ba7e;
     uint32 private constant DEFAULT_VALID_TO_OFFSET = 3600;
+    uint256 private constant PARTNER_FEE_BPS = 20;
 
-    // ── Limit order registry ──────────────────────────────────────────────────
-    // orderHash → validTo; 0 = not registered
+    // orderHash → validTo;
     mapping(bytes32 => uint256) public activeOrders;
 
-    // ── TWAP order registry ───────────────────────────────────────────────────
     mapping(bytes32 => TwapParams) public twapOrders;
     bytes32[] private _activeTwapIds;
 
@@ -88,12 +87,15 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
             bool isSellOrder
         ) = _decodeSwapData(data);
 
+        uint256 adjustedSellAmount = isSellOrder ? sellAmount_ : sellAmount_ * (10_000 + PARTNER_FEE_BPS) / 10_000;
+        uint256 adjustedBuyAmount = isSellOrder ? buyAmountMin * (10_000 - PARTNER_FEE_BPS) / 10_000 : buyAmountMin;
+
         GPv2Order.Data memory order = GPv2Order.Data({
             sellToken: IERC20(sellToken_),
             buyToken: IERC20(buyToken),
             receiver: owner(),
-            sellAmount: sellAmount_,
-            buyAmount: buyAmountMin,
+            sellAmount: adjustedSellAmount,
+            buyAmount: adjustedBuyAmount,
             validTo: validTo,
             appData: APP_DATA,
             feeAmount: 0,
@@ -108,7 +110,7 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
         instructions = IBittyV1IntentProtocol.OrderInstructions({
             orderId: orderHash,
             sellToken: sellToken_,
-            sellAmount: sellAmount_,
+            sellAmount: adjustedSellAmount,
             approveTarget: vaultRelayer,
             registerTarget: address(this),
             registerCalldata: abi.encodeCall(this.registerOrder, (orderHash, validTo))
@@ -154,7 +156,7 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
             sellToken: sellToken_,
             buyToken: buyToken_,
             sellAmountPerPart: sellAmountPerPart,
-            buyAmountMinPerPart: minPartLimit,
+            buyAmountMinPerPart: minPartLimit * (10_000 - PARTNER_FEE_BPS) / 10_000,
             startTime: uint32(block.timestamp),
             partDuration: uint32(partDuration_),
             span: uint32(span_),

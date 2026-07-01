@@ -45,6 +45,7 @@ interface IBittyV1IntentProtocol is IBittyV1Protocol {
     }
 
     event OrderCreated(bytes32 indexed orderId, address indexed vault);
+    event OrderCancelled(bytes32 indexed orderId, address indexed vault);
     event TwapCreated(bytes32 indexed twapId, address indexed vault);
     event TwapCancelled(bytes32 indexed twapId, address indexed vault);
 

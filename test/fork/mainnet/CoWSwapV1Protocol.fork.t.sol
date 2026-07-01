@@ -51,7 +51,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
         IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
 
         assertEq(instr.sellToken, address(mainnet.USDC));
-        assertEq(instr.sellAmount, sellAmountMax);
+        assertEq(instr.sellAmount, sellAmountMax * 10_020 / 10_000); // +20bps fee headroom
         assertEq(instr.approveTarget, mainnet.COW_VAULT_RELAYER);
         assertEq(instr.registerTarget, address(protocol));
     }
