@@ -93,7 +93,7 @@ contract TestLidoProtocolFork is Test {
         lidoProtocol.stake(address(weth), stakeAmount + 1 ether);
     }
 
-    function test_Unstake_ResetsApprovalToZero() public {
+    function test_Unstake_UsesMaxApproval() public {
         uint256 stakeAmount = 1 ether;
         deal(address(weth), address(this), stakeAmount);
         weth.approve(address(lidoProtocol), stakeAmount);
@@ -104,7 +104,20 @@ contract TestLidoProtocolFork is Test {
         lidoProtocol.unstake(address(weth), unstakeAmount);
 
         uint256 remaining = IERC20(address(stETH)).allowance(address(lidoProtocol), address(unstETH));
-        assertEq(remaining, 0, "approval to unstETH must be 0 after unstake");
+        assertGe(remaining, type(uint256).max / 2, "unstETH must keep a standing max approval after unstake");
+    }
+
+    function test_UnstakeMax_FullExit() public {
+        uint256 stakeAmount = 1 ether;
+        deal(address(weth), address(this), stakeAmount);
+        weth.approve(address(lidoProtocol), stakeAmount);
+        lidoProtocol.stake(address(weth), stakeAmount);
+
+        IERC20(address(stETH)).approve(address(lidoProtocol), type(uint256).max);
+        lidoProtocol.unstake(address(weth), type(uint256).max);
+
+        assertLe(stETH.balanceOf(address(this)), 2, "stETH fully unstaked");
+        assertEq(lidoProtocol.getUnstakeRequestIds().length, 1, "withdrawal request created");
     }
 
     function test_Claim_ReturnWETHToVault() public {

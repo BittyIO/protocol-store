@@ -97,7 +97,7 @@ contract TestAaveProtocolFork is Test {
         assertEq(balanceAfter, currentATokenBalance);
     }
 
-    function test_Supply_ResetsApprovalToZero() public {
+    function test_Supply_UsesMaxApproval() public {
         deal(address(mainnet.WETH), address(this), 1 ether);
         IERC20(address(mainnet.WETH)).forceApprove(address(aaveProtocol), 1 ether);
 
@@ -105,7 +105,7 @@ contract TestAaveProtocolFork is Test {
 
         address pool = address(IAaveV3(mainnet.AAVE_V3).getPool());
         uint256 remaining = IERC20(address(mainnet.WETH)).allowance(address(aaveProtocol), pool);
-        assertEq(remaining, 0, "approval to Aave pool must be 0 after supply");
+        assertGe(remaining, type(uint256).max / 2, "pool must keep a standing max approval after supply");
     }
 
     function test_SupplyMultipleAssets() public {

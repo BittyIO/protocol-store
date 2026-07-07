@@ -48,10 +48,14 @@ contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
 
         usdc.safeTransferFrom(msg.sender, address(this), amount);
 
-        usdc.safeIncreaseAllowance(address(psm), amount);
+        if (usdc.allowance(address(this), address(psm)) < amount) {
+            usdc.forceApprove(address(psm), type(uint256).max);
+        }
         uint256 usdsReceived = psm.sellGem(address(this), amount);
 
-        usds.safeIncreaseAllowance(address(sUsds), usdsReceived);
+        if (usds.allowance(address(this), address(sUsds)) < usdsReceived) {
+            usds.forceApprove(address(sUsds), type(uint256).max);
+        }
         sUsds.deposit(usdsReceived, address(this));
 
         if (receiptTokenOf[asset] == address(0)) {
@@ -87,6 +91,25 @@ contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         if (asset != address(usdc)) revert InvalidAsset();
 
         uint256 tout = psm.tout();
+
+        if (amount == type(uint256).max) {
+            uint256 shares = sUsds.balanceOf(msg.sender);
+            IERC20(address(sUsds)).safeTransferFrom(msg.sender, address(this), shares);
+            uint256 usdsAvailable = sUsds.convertToAssets(shares);
+            sUsds.withdraw(usdsAvailable, address(this), address(this));
+
+            amount = usdsAvailable * WAD / (GEM_CONVERSION_FACTOR * (WAD + tout));
+
+            if (usds.allowance(address(this), address(psm)) < usdsAvailable) {
+                usds.forceApprove(address(psm), type(uint256).max);
+            }
+            psm.buyGem(msg.sender, amount);
+
+            uint256 dust = usds.balanceOf(address(this));
+            if (dust > 0) usds.safeTransfer(msg.sender, dust);
+            return;
+        }
+
         uint256 usdsNeeded = amount * GEM_CONVERSION_FACTOR;
         if (tout > 0) {
             usdsNeeded = usdsNeeded + (usdsNeeded * tout) / WAD;
@@ -97,7 +120,9 @@ contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
 
         sUsds.withdraw(usdsNeeded, address(this), address(this));
 
-        usds.safeIncreaseAllowance(address(psm), usdsNeeded);
+        if (usds.allowance(address(this), address(psm)) < usdsNeeded) {
+            usds.forceApprove(address(psm), type(uint256).max);
+        }
         psm.buyGem(msg.sender, amount);
     }
 

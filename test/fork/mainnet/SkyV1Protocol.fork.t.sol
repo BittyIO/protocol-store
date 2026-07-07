@@ -62,13 +62,13 @@ contract TestSkyV1ProtocolFork is Test {
         assertGt(sUsds.balanceOf(address(this)), sharesBefore);
     }
 
-    function test_Stake_ResetsApprovals() public {
+    function test_Stake_UsesMaxApproval() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
         usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
         skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
 
-        assertEq(usdc.allowance(address(skyProtocol), mainnet.SKY_PSM), 0);
-        assertEq(usds.allowance(address(skyProtocol), mainnet.S_USDS), 0);
+        assertGe(usdc.allowance(address(skyProtocol), mainnet.SKY_PSM), type(uint256).max / 2);
+        assertGe(usds.allowance(address(skyProtocol), mainnet.S_USDS), type(uint256).max / 2);
     }
 
     function test_Stake_RevertOnWrongAsset() public {
@@ -112,7 +112,7 @@ contract TestSkyV1ProtocolFork is Test {
         assertEq(usds.balanceOf(address(skyProtocol)), 0);
     }
 
-    function test_Unstake_ResetsApprovals() public {
+    function test_Unstake_UsesMaxApproval() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
         usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
         skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
@@ -121,7 +121,36 @@ contract TestSkyV1ProtocolFork is Test {
         uint256 stakedBalance = skyProtocol.getStakedBalance(mainnet.USDC);
         skyProtocol.unstake(mainnet.USDC, stakedBalance);
 
-        assertEq(usds.allowance(address(skyProtocol), mainnet.SKY_PSM), 0);
+        assertGe(usds.allowance(address(skyProtocol), mainnet.SKY_PSM), type(uint256).max / 2);
+    }
+
+    function test_UnstakeMax_FullExit() public {
+        deal(mainnet.USDC, address(this), STAKE_AMOUNT);
+        usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
+        skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
+
+        IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
+        uint256 usdcBefore = usdc.balanceOf(address(this));
+        skyProtocol.unstake(mainnet.USDC, type(uint256).max);
+
+        assertEq(sUsds.balanceOf(address(this)), 0, "all sUSDS shares redeemed");
+        assertApproxEqAbs(usdc.balanceOf(address(this)) - usdcBefore, STAKE_AMOUNT, STAKE_AMOUNT / 100);
+    }
+
+    function test_UnstakeMax_FullExit_WithTout() public {
+        deal(mainnet.USDC, address(this), STAKE_AMOUNT);
+        usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
+        skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
+
+        IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
+        vm.mockCall(mainnet.SKY_PSM, abi.encodeWithSelector(IDssPsm.tout.selector), abi.encode(uint256(1e15)));
+
+        uint256 gross = skyProtocol.getStakedBalance(mainnet.USDC);
+        vm.expectRevert();
+        skyProtocol.unstake(mainnet.USDC, gross);
+
+        skyProtocol.unstake(mainnet.USDC, type(uint256).max);
+        assertEq(sUsds.balanceOf(address(this)), 0, "full exit works with a non-zero PSM toll");
     }
 
     function test_Unstake_RevertOnWrongAsset() public {

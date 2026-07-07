@@ -35,7 +35,9 @@ contract AaveV3Protocol is IBittyV1LendingProtocol, Ownable, Initializable {
     function supply(address asset, uint256 amount) external payable override onlyOwner {
         IERC20(asset).safeTransferFrom(msg.sender, address(this), amount);
         IAavePool pool = IAaveV3(aaveV3).getPool();
-        IERC20(asset).safeIncreaseAllowance(address(pool), amount);
+        if (IERC20(asset).allowance(address(this), address(pool)) < amount) {
+            IERC20(asset).forceApprove(address(pool), type(uint256).max);
+        }
         pool.supply(asset, amount, address(this), 0);
 
         address aToken = _getAToken(asset);

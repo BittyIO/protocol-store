@@ -61,15 +61,13 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
 
         if (tokenIn != address(0)) {
             IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), swapAmountIn);
-            IERC20(tokenIn).forceApprove(router, swapAmountIn);
+            if (IERC20(tokenIn).allowance(address(this), router) < swapAmountIn) {
+                IERC20(tokenIn).forceApprove(router, type(uint256).max);
+            }
         }
 
         uint256 amountOut =
             IUniswapV3Router(router).exactInput{value: tokenIn == address(0) ? swapAmountIn : msg.value}(params);
-
-        if (tokenIn != address(0)) {
-            IERC20(tokenIn).forceApprove(router, 0);
-        }
 
         if (address(this).balance != 0) {
             Address.sendValue(payable(msg.sender), address(this).balance);
@@ -98,14 +96,15 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
 
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountInMaximum);
         if (fee > 0) IERC20(tokenIn).safeTransfer(FEE_RECIPIENT, fee);
-        IERC20(tokenIn).forceApprove(router, swapAmountInMaximum);
+        if (IERC20(tokenIn).allowance(address(this), router) < swapAmountInMaximum) {
+            IERC20(tokenIn).forceApprove(router, type(uint256).max);
+        }
 
         IUniswapV3Router.ExactOutputParams memory params = IUniswapV3Router.ExactOutputParams({
             path: path, recipient: address(this), amountOut: amountOut, amountInMaximum: swapAmountInMaximum
         });
 
         uint256 amountIn = IUniswapV3Router(router).exactOutput(params);
-        IERC20(tokenIn).forceApprove(router, 0);
 
         uint256 leftover = swapAmountInMaximum - amountIn;
         if (leftover > 0) IERC20(tokenIn).safeTransfer(msg.sender, leftover);
@@ -121,21 +120,23 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
             params.recipient = address(this);
             if (params.token0 != address(0)) {
                 IERC20(params.token0).safeTransferFrom(msg.sender, address(this), params.amount0Desired);
-                IERC20(params.token0).forceApprove(positionManager, params.amount0Desired);
+                if (IERC20(params.token0).allowance(address(this), positionManager) < params.amount0Desired) {
+                    IERC20(params.token0).forceApprove(positionManager, type(uint256).max);
+                }
             }
             if (params.token1 != address(0)) {
                 IERC20(params.token1).safeTransferFrom(msg.sender, address(this), params.amount1Desired);
-                IERC20(params.token1).forceApprove(positionManager, params.amount1Desired);
+                if (IERC20(params.token1).allowance(address(this), positionManager) < params.amount1Desired) {
+                    IERC20(params.token1).forceApprove(positionManager, type(uint256).max);
+                }
             }
             (uint256 tokenId,, uint256 amount0Used, uint256 amount1Used) =
                 INonfungiblePositionManager(positionManager).mint(params);
             if (params.token0 != address(0)) {
-                IERC20(params.token0).forceApprove(positionManager, 0);
                 uint256 leftover0 = params.amount0Desired - amount0Used;
                 if (leftover0 > 0) IERC20(params.token0).safeTransfer(msg.sender, leftover0);
             }
             if (params.token1 != address(0)) {
-                IERC20(params.token1).forceApprove(positionManager, 0);
                 uint256 leftover1 = params.amount1Desired - amount1Used;
                 if (leftover1 > 0) IERC20(params.token1).safeTransfer(msg.sender, leftover1);
             }
@@ -147,21 +148,23 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
                 INonfungiblePositionManager(positionManager).positions(params.tokenId);
             if (token0 != address(0)) {
                 IERC20(token0).safeTransferFrom(msg.sender, address(this), params.amount0Desired);
-                IERC20(token0).forceApprove(positionManager, params.amount0Desired);
+                if (IERC20(token0).allowance(address(this), positionManager) < params.amount0Desired) {
+                    IERC20(token0).forceApprove(positionManager, type(uint256).max);
+                }
             }
             if (token1 != address(0)) {
                 IERC20(token1).safeTransferFrom(msg.sender, address(this), params.amount1Desired);
-                IERC20(token1).forceApprove(positionManager, params.amount1Desired);
+                if (IERC20(token1).allowance(address(this), positionManager) < params.amount1Desired) {
+                    IERC20(token1).forceApprove(positionManager, type(uint256).max);
+                }
             }
             (, uint256 amount0Used, uint256 amount1Used) =
                 INonfungiblePositionManager(positionManager).increaseLiquidity(params);
             if (token0 != address(0)) {
-                IERC20(token0).forceApprove(positionManager, 0);
                 uint256 leftover0 = params.amount0Desired - amount0Used;
                 if (leftover0 > 0) IERC20(token0).safeTransfer(msg.sender, leftover0);
             }
             if (token1 != address(0)) {
-                IERC20(token1).forceApprove(positionManager, 0);
                 uint256 leftover1 = params.amount1Desired - amount1Used;
                 if (leftover1 > 0) IERC20(token1).safeTransfer(msg.sender, leftover1);
             }

@@ -76,10 +76,17 @@ contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         if (asset != address(weth)) {
             revert InvalidAsset();
         }
+        if (amount == type(uint256).max) {
+            amount = IERC20(address(stETH)).balanceOf(msg.sender);
+        }
+        uint256 balanceBefore = IERC20(address(stETH)).balanceOf(address(this));
         IERC20(address(stETH)).safeTransferFrom(msg.sender, address(this), amount);
+        uint256 received = IERC20(address(stETH)).balanceOf(address(this)) - balanceBefore;
         uint256[] memory amounts = new uint256[](1);
-        amounts[0] = amount;
-        IERC20(address(stETH)).safeIncreaseAllowance(address(unstETH), amount);
+        amounts[0] = received;
+        if (IERC20(address(stETH)).allowance(address(this), address(unstETH)) < received) {
+            IERC20(address(stETH)).forceApprove(address(unstETH), type(uint256).max);
+        }
         uint256[] memory requestIds = unstETH.requestWithdrawals(amounts, address(this));
         _unstakeRequests.add(requestIds[0]);
     }
