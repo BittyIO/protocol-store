@@ -90,12 +90,9 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
         (address tokenIn, uint256 amountInMaximum, address tokenOut, uint256 amountOut, bytes memory path) =
             abi.decode(data, (address, uint256, address, uint256, bytes));
 
-        // Fee always from the sell token; deduct before routing so the vault receives exact buyAmount.
-        uint256 fee = amountInMaximum * SWAP_FEE_BPS / 10_000;
-        uint256 swapAmountInMaximum = amountInMaximum - fee;
-
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountInMaximum);
-        if (fee > 0) IERC20(tokenIn).safeTransfer(FEE_RECIPIENT, fee);
+
+        uint256 swapAmountInMaximum = amountInMaximum * 10_000 / (10_000 + SWAP_FEE_BPS);
         if (IERC20(tokenIn).allowance(address(this), router) < swapAmountInMaximum) {
             IERC20(tokenIn).forceApprove(router, type(uint256).max);
         }
@@ -106,7 +103,10 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
 
         uint256 amountIn = IUniswapV3Router(router).exactOutput(params);
 
-        uint256 leftover = swapAmountInMaximum - amountIn;
+        uint256 fee = amountIn * SWAP_FEE_BPS / 10_000;
+        if (fee > 0) IERC20(tokenIn).safeTransfer(FEE_RECIPIENT, fee);
+
+        uint256 leftover = amountInMaximum - amountIn - fee;
         if (leftover > 0) IERC20(tokenIn).safeTransfer(msg.sender, leftover);
 
         IERC20(tokenOut).safeTransfer(msg.sender, amountOut);
@@ -193,9 +193,6 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
                     })
                 );
         }
-        // Collect everything owed in a single pass. The decreaseLiquidity return
-        // values are the exact principal; anything else collected is fees and is
-        // subject to the protocol collect fee.
         _collectAndDistribute(params.tokenId, principal0, principal1, type(uint128).max, type(uint128).max);
 
         IERC721(positionManager).transferFrom(address(this), msg.sender, params.tokenId);
@@ -209,9 +206,6 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
 
         (uint256 principal0, uint256 principal1) =
             INonfungiblePositionManager(positionManager).decreaseLiquidity(params);
-        // Collect principal + fees in one pass. Fees (everything beyond the
-        // decreased principal) always take the protocol collect fee, even on a
-        // partial decrease, so no fees can later be misclassified as principal.
         _collectAndDistribute(params.tokenId, principal0, principal1, type(uint128).max, type(uint128).max);
 
         IERC721(positionManager).transferFrom(address(this), msg.sender, params.tokenId);
@@ -228,8 +222,6 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
             abi.decode(data, (INonfungiblePositionManager.CollectParams));
 
         IERC721(positionManager).transferFrom(msg.sender, address(this), params.tokenId);
-        // Pure fee claim: no principal is being withdrawn, so everything
-        // collected is fees and takes the protocol collect fee.
         _collectAndDistribute(params.tokenId, 0, 0, params.amount0Max, params.amount1Max);
         IERC721(positionManager).transferFrom(address(this), msg.sender, params.tokenId);
     }

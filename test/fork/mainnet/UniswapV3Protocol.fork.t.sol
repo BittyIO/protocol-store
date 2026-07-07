@@ -257,6 +257,39 @@ contract TestUniswapProtocolFork is Test {
         );
     }
 
+    function test_V3_SwapExactOut_ChargesFeeOnActualInputNotMaximum() public {
+        // exactOutput path is encoded output -> input
+        address[] memory path = new address[](2);
+        path[0] = address(mainnet.USDT);
+        path[1] = address(mainnet.WETH);
+        uint24[] memory fees = new uint24[](1);
+        fees[0] = 3000;
+        bytes memory encodedPath = Path.encodePath(path, fees);
+
+        uint256 amountOut = 1000 * 1e6;
+        uint256 amountInMaximum = 5 ether;
+        bytes memory swapData =
+            abi.encode(address(mainnet.WETH), amountInMaximum, address(mainnet.USDT), amountOut, encodedPath);
+
+        deal(address(mainnet.WETH), address(this), amountInMaximum);
+        IERC20(address(mainnet.WETH)).forceApprove(address(v3Protocol), amountInMaximum);
+
+        uint256 feeRecipientBefore = IERC20(address(mainnet.WETH)).balanceOf(FEE_RECIPIENT);
+        uint256 ownerBefore = IERC20(address(mainnet.WETH)).balanceOf(address(this));
+        uint256 usdtBefore = IERC20(address(mainnet.USDT)).balanceOf(address(this));
+
+        v3Protocol.swapExactOut(swapData);
+
+        assertEq(IERC20(address(mainnet.USDT)).balanceOf(address(this)) - usdtBefore, amountOut, "exact buy amount");
+
+        uint256 feeCharged = IERC20(address(mainnet.WETH)).balanceOf(FEE_RECIPIENT) - feeRecipientBefore;
+        uint256 wethSpent = ownerBefore - IERC20(address(mainnet.WETH)).balanceOf(address(this));
+        uint256 actualAmountIn = wethSpent - feeCharged;
+
+        assertEq(feeCharged, actualAmountIn * SWAP_FEE_BPS / 10_000, "fee charged on actual input");
+        assertLt(feeCharged, amountInMaximum * SWAP_FEE_BPS / 10_000, "no overcharge on the maximum");
+    }
+
     function test_V3_Swap_RevertsWhenPoolDoesNotExist() public {
         address tokenIn = NO_V3_POOL_TOKEN;
         address tokenOut = address(mainnet.WETH);
