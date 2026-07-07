@@ -200,7 +200,11 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
 
     /**
      * @notice Build cancel instructions for a limit order or TWAP.
-     *         Routes to deregisterTwap() for TWAP orders, deregisterOrder() for limit orders.
+     *         TWAP orders deregister locally (each part self-expires within its window).
+     *         Limit orders are invalidated on the settlement contract, which emits
+     *         OrderInvalidated — indexed by CoW's orderbook so the order is marked cancelled
+     *         off-chain immediately, not just left un-fillable until expiry. invalidateOrder
+     *         must be called by the order owner (the vault), which the vault does as msg.sender.
      */
     function buildCancelInstructions(bytes32 orderId)
         external
@@ -208,13 +212,20 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
         override
         returns (IBittyV1IntentProtocol.CancelInstructions memory instructions)
     {
-        bytes memory calldata_ = twapOrders[orderId].n != 0
-            ? abi.encodeCall(this.deregisterTwap, (orderId))
-            : abi.encodeCall(this.deregisterOrder, (orderId));
-
-        instructions = IBittyV1IntentProtocol.CancelInstructions({
-            cancelTarget: address(this), cancelCalldata: calldata_, approveTarget: vaultRelayer
-        });
+        if (twapOrders[orderId].n != 0) {
+            instructions = IBittyV1IntentProtocol.CancelInstructions({
+                cancelTarget: address(this),
+                cancelCalldata: abi.encodeCall(this.deregisterTwap, (orderId)),
+                approveTarget: vaultRelayer
+            });
+        } else {
+            bytes memory orderUid = abi.encodePacked(orderId, owner(), uint32(activeOrders[orderId]));
+            instructions = IBittyV1IntentProtocol.CancelInstructions({
+                cancelTarget: address(settlement),
+                cancelCalldata: abi.encodeCall(IGPv2Settlement.invalidateOrder, (orderUid)),
+                approveTarget: vaultRelayer
+            });
+        }
     }
 
     // ============ EIP-1271 ============
@@ -233,7 +244,9 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
     {
         // Limit orders
         uint256 validTo = activeOrders[hash];
-        if (validTo != 0 && block.timestamp <= validTo) return 0x1626ba7e;
+        if (validTo != 0 && block.timestamp <= validTo && !_isInvalidated(hash, validTo)) {
+            return 0x1626ba7e;
+        }
 
         // TWAP — check if hash matches the current part of any active TWAP
         uint256 len = _activeTwapIds.length;
@@ -249,7 +262,9 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
 
     function isOrderActive(bytes32 orderHash) external view returns (bool) {
         uint256 validTo = activeOrders[orderHash];
-        if (validTo != 0 && block.timestamp <= validTo) return true;
+        if (validTo != 0 && block.timestamp <= validTo && !_isInvalidated(orderHash, validTo)) {
+            return true;
+        }
         uint256 len = _activeTwapIds.length;
         for (uint256 i = 0; i < len; i++) {
             bytes32 partHash = _computeCurrentTwapPartHash(twapOrders[_activeTwapIds[i]]);
@@ -302,6 +317,13 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
         });
 
         return GPv2Order.hash(order, settlement.domainSeparator());
+    }
+
+    /// @dev A cancelled (or filled) limit order has filledAmount == max/nonzero on the settlement,
+    ///      so it is treated as no longer signable even though activeOrders still holds its validTo.
+    function _isInvalidated(bytes32 orderHash, uint256 validTo) internal view returns (bool) {
+        bytes memory uid = abi.encodePacked(orderHash, owner(), uint32(validTo));
+        return settlement.filledAmount(uid) != 0;
     }
 
     function _discountForPartnerFee(uint256 amount) internal pure returns (uint256) {

@@ -74,36 +74,66 @@ contract TestCoWSwapV1ProtocolFork is Test {
         assertEq(instr.registerTarget, address(protocol));
     }
 
-    function test_BuildCancelInstructions_ReturnsDeregisterOrder() public view {
+    function test_BuildCancelInstructions_Limit_RoutesToInvalidateOrder() public view {
         bytes32 orderId = keccak256("test-order");
         IBittyV1IntentProtocol.CancelInstructions memory instr = protocol.buildCancelInstructions(orderId);
 
-        assertEq(instr.cancelTarget, address(protocol));
-        bytes memory expected = abi.encodeWithSignature("deregisterOrder(bytes32)", orderId);
+        assertEq(instr.cancelTarget, mainnet.COW_SETTLEMENT);
+        bytes memory uid = abi.encodePacked(orderId, VAULT, uint32(0));
+        bytes memory expected = abi.encodeWithSignature("invalidateOrder(bytes)", uid);
         assertEq(instr.cancelCalldata, expected);
     }
 
-    function test_IsOrderActive_TrueAfterRegister_FalseAfterDeregister() public {
+    function test_IsOrderActive_TrueAfterRegister_FalseAfterCancel() public {
         uint256 sellAmount = 1000e6;
         uint32 validTo = uint32(block.timestamp + 3600);
         bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
 
         IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
 
-        // Simulate vault registering the order via registerCalldata
         vm.prank(VAULT);
         (bool ok,) = address(protocol).call(instr.registerCalldata);
         assertTrue(ok);
 
         assertTrue(protocol.isOrderActive(instr.orderId), "order must be active after register");
 
-        // Simulate vault cancelling
         IBittyV1IntentProtocol.CancelInstructions memory cancel = protocol.buildCancelInstructions(instr.orderId);
         vm.prank(VAULT);
-        (ok,) = address(protocol).call(cancel.cancelCalldata);
+        (ok,) = cancel.cancelTarget.call(cancel.cancelCalldata);
         assertTrue(ok);
 
-        assertFalse(protocol.isOrderActive(instr.orderId), "order must be inactive after deregister");
+        assertFalse(protocol.isOrderActive(instr.orderId), "order must be inactive after cancel");
+    }
+
+    function test_CancelLimitOrder_InvalidatesOnSettlementAndBlocksSignature() public {
+        uint256 sellAmount = 1000e6;
+        uint32 validTo = uint32(block.timestamp + 3600);
+        bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
+
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
+
+        vm.prank(VAULT);
+        (bool ok,) = address(protocol).call(instr.registerCalldata);
+        assertTrue(ok);
+        assertEq(protocol.isValidSignature(instr.orderId, ""), bytes4(0x1626ba7e));
+
+        IBittyV1IntentProtocol.CancelInstructions memory cancel = protocol.buildCancelInstructions(instr.orderId);
+        assertEq(cancel.cancelTarget, mainnet.COW_SETTLEMENT, "limit cancel must target the settlement");
+
+        bytes memory uid = abi.encodePacked(instr.orderId, VAULT, validTo);
+        assertEq(IGPv2Settlement(mainnet.COW_SETTLEMENT).filledAmount(uid), 0);
+
+        vm.prank(VAULT);
+        (ok,) = cancel.cancelTarget.call(cancel.cancelCalldata);
+        assertTrue(ok, "invalidateOrder call must succeed");
+
+        assertEq(
+            IGPv2Settlement(mainnet.COW_SETTLEMENT).filledAmount(uid),
+            type(uint256).max,
+            "order must be invalidated on the settlement so CoW marks it cancelled"
+        );
+        assertEq(protocol.isValidSignature(instr.orderId, ""), bytes4(0xffffffff), "signature invalid after cancel");
+        assertFalse(protocol.isOrderActive(instr.orderId), "order inactive after cancel");
     }
 
     function test_IsOrderActive_FalseAfterExpiry() public {
