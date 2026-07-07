@@ -6,6 +6,7 @@ import {IGPv2Settlement} from "../../libs/cow/IGPv2Settlement.sol";
 import {GPv2Order} from "../../libs/cow/GPv2Order.sol";
 import {IERC1271} from "../../libs/cow/IERC1271.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
@@ -39,6 +40,7 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
     bytes4 private constant MAGICVALUE = 0x1626ba7e;
     uint32 private constant DEFAULT_VALID_TO_OFFSET = 3600;
     uint256 private constant PARTNER_FEE_BPS = 20;
+    address public constant PARTNER_FEE_RECIPIENT = 0x12EE2de7BF086388B1D560eb95e7191Edfab9823;
 
     // orderHash → validTo;
     mapping(bytes32 => uint256) public activeOrders;
@@ -87,8 +89,8 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
             bool isSellOrder
         ) = _decodeSwapData(data);
 
-        uint256 adjustedSellAmount = isSellOrder ? sellAmount_ : sellAmount_ * (10_000 + PARTNER_FEE_BPS) / 10_000;
-        uint256 adjustedBuyAmount = isSellOrder ? buyAmountMin * (10_000 - PARTNER_FEE_BPS) / 10_000 : buyAmountMin;
+        uint256 adjustedSellAmount = isSellOrder ? sellAmount_ : _grossUpForPartnerFee(sellAmount_);
+        uint256 adjustedBuyAmount = isSellOrder ? _discountForPartnerFee(buyAmountMin) : buyAmountMin;
 
         GPv2Order.Data memory order = GPv2Order.Data({
             sellToken: IERC20(sellToken_),
@@ -156,7 +158,7 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
             sellToken: sellToken_,
             buyToken: buyToken_,
             sellAmountPerPart: sellAmountPerPart,
-            buyAmountMinPerPart: minPartLimit * (10_000 - PARTNER_FEE_BPS) / 10_000,
+            buyAmountMinPerPart: _discountForPartnerFee(minPartLimit),
             startTime: uint32(block.timestamp),
             partDuration: uint32(partDuration_),
             span: uint32(span_),
@@ -300,6 +302,14 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
         });
 
         return GPv2Order.hash(order, settlement.domainSeparator());
+    }
+
+    function _discountForPartnerFee(uint256 amount) internal pure returns (uint256) {
+        return amount * (10_000 - PARTNER_FEE_BPS) / 10_000;
+    }
+
+    function _grossUpForPartnerFee(uint256 amount) internal pure returns (uint256) {
+        return amount * (10_000 + PARTNER_FEE_BPS) / 10_000;
     }
 
     function _decodeSwapData(bytes memory data)

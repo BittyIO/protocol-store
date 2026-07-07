@@ -174,11 +174,12 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
 
         IERC721(positionManager).transferFrom(msg.sender, address(this), params.tokenId);
 
-        _claimAMMFees(params.tokenId, type(uint128).max, type(uint128).max);
-
         (,,,,,,, uint128 liquidity,,,,) = INonfungiblePositionManager(positionManager).positions(params.tokenId);
+
+        uint256 principal0;
+        uint256 principal1;
         if (liquidity > 0) {
-            (uint256 amount0, uint256 amount1) = INonfungiblePositionManager(positionManager)
+            (principal0, principal1) = INonfungiblePositionManager(positionManager)
                 .decreaseLiquidity(
                     INonfungiblePositionManager.DecreaseLiquidityParams({
                         tokenId: params.tokenId,
@@ -188,8 +189,11 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
                         deadline: params.deadline
                     })
                 );
-            _collectPrincipal(params.tokenId, uint128(amount0), uint128(amount1));
         }
+        // Collect everything owed in a single pass. The decreaseLiquidity return
+        // values are the exact principal; anything else collected is fees and is
+        // subject to the protocol collect fee.
+        _collectAndDistribute(params.tokenId, principal0, principal1, type(uint128).max, type(uint128).max);
 
         IERC721(positionManager).transferFrom(address(this), msg.sender, params.tokenId);
     }
@@ -200,13 +204,12 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
 
         IERC721(positionManager).transferFrom(msg.sender, address(this), params.tokenId);
 
-        (,,,,,,, uint128 liquidity,,,,) = INonfungiblePositionManager(positionManager).positions(params.tokenId);
-        if (params.liquidity == liquidity) {
-            _claimAMMFees(params.tokenId, type(uint128).max, type(uint128).max);
-        }
-
-        (uint256 amount0, uint256 amount1) = INonfungiblePositionManager(positionManager).decreaseLiquidity(params);
-        _collectPrincipal(params.tokenId, uint128(amount0), uint128(amount1));
+        (uint256 principal0, uint256 principal1) =
+            INonfungiblePositionManager(positionManager).decreaseLiquidity(params);
+        // Collect principal + fees in one pass. Fees (everything beyond the
+        // decreased principal) always take the protocol collect fee, even on a
+        // partial decrease, so no fees can later be misclassified as principal.
+        _collectAndDistribute(params.tokenId, principal0, principal1, type(uint128).max, type(uint128).max);
 
         IERC721(positionManager).transferFrom(address(this), msg.sender, params.tokenId);
     }
@@ -222,7 +225,9 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
             abi.decode(data, (INonfungiblePositionManager.CollectParams));
 
         IERC721(positionManager).transferFrom(msg.sender, address(this), params.tokenId);
-        _claimAMMFees(params.tokenId, params.amount0Max, params.amount1Max);
+        // Pure fee claim: no principal is being withdrawn, so everything
+        // collected is fees and takes the protocol collect fee.
+        _collectAndDistribute(params.tokenId, 0, 0, params.amount0Max, params.amount1Max);
         IERC721(positionManager).transferFrom(address(this), msg.sender, params.tokenId);
     }
 
@@ -236,35 +241,37 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
         return IBittyV1Guard(bittyGuard).isStableCoinRegistered(token);
     }
 
-    function _collectPrincipal(uint256 tokenId, uint128 amount0Max, uint128 amount1Max) internal {
+    /**
+     * @notice Collect all owed tokens for a position and split them into principal
+     *         (paid in full to the owner) and trading fees (subject to the protocol
+     *         collect fee).
+     * @dev `principal0`/`principal1` are the exact amounts returned by
+     *      decreaseLiquidity for this operation (0 for a pure fee claim). Anything
+     *      collected beyond the principal is treated as fees. Deriving principal from
+     *      the decreaseLiquidity return — rather than the position's tokensOwed —
+     *      means fees left in tokensOwed after a partial decrease can never be
+     *      misclassified as principal and escape the protocol fee.
+     */
+    function _collectAndDistribute(
+        uint256 tokenId,
+        uint256 principal0,
+        uint256 principal1,
+        uint128 amount0Max,
+        uint128 amount1Max
+    ) internal {
         (,, address token0, address token1,,,,,,,,) = INonfungiblePositionManager(positionManager).positions(tokenId);
 
-        (uint256 amount0, uint256 amount1) = INonfungiblePositionManager(positionManager)
+        (uint256 collected0, uint256 collected1) = INonfungiblePositionManager(positionManager)
             .collect(
                 INonfungiblePositionManager.CollectParams({
                     tokenId: tokenId, recipient: address(this), amount0Max: amount0Max, amount1Max: amount1Max
                 })
             );
 
-        if (amount0 > 0) IERC20(token0).safeTransfer(msg.sender, amount0);
-        if (amount1 > 0) IERC20(token1).safeTransfer(msg.sender, amount1);
-    }
-
-    function _claimAMMFees(uint256 tokenId, uint128 amount0Max, uint128 amount1Max) internal {
-        (,, address token0, address token1,,,,,,, uint128 principalOwed0, uint128 principalOwed1) =
-            INonfungiblePositionManager(positionManager).positions(tokenId);
-
-        (uint256 amount0, uint256 amount1) = INonfungiblePositionManager(positionManager)
-            .collect(
-                INonfungiblePositionManager.CollectParams({
-                    tokenId: tokenId, recipient: address(this), amount0Max: amount0Max, amount1Max: amount1Max
-                })
-            );
-
-        uint256 principalCollected0 = amount0 < principalOwed0 ? amount0 : principalOwed0;
-        uint256 principalCollected1 = amount1 < principalOwed1 ? amount1 : principalOwed1;
-        uint256 feeAmount0 = amount0 - principalCollected0;
-        uint256 feeAmount1 = amount1 - principalCollected1;
+        uint256 principalCollected0 = collected0 < principal0 ? collected0 : principal0;
+        uint256 principalCollected1 = collected1 < principal1 ? collected1 : principal1;
+        uint256 feeAmount0 = collected0 - principalCollected0;
+        uint256 feeAmount1 = collected1 - principalCollected1;
 
         if (principalCollected0 > 0) IERC20(token0).safeTransfer(msg.sender, principalCollected0);
         if (principalCollected1 > 0) IERC20(token1).safeTransfer(msg.sender, principalCollected1);

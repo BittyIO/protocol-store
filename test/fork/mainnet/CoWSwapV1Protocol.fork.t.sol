@@ -39,6 +39,24 @@ contract TestCoWSwapV1ProtocolFork is Test {
         assertEq(instr.registerTarget, address(protocol));
         assertTrue(instr.orderId != bytes32(0));
         assertTrue(instr.registerCalldata.length > 0);
+
+        GPv2Order.Data memory expectedOrder = GPv2Order.Data({
+            sellToken: IERC20(address(mainnet.USDC)),
+            buyToken: IERC20(address(mainnet.WETH)),
+            receiver: VAULT,
+            sellAmount: sellAmount,
+            buyAmount: 1e15 * 9_980 / 10_000,
+            validTo: validTo,
+            appData: protocol.APP_DATA(),
+            feeAmount: 0,
+            kind: GPv2Order.KIND_SELL,
+            partiallyFillable: false,
+            sellTokenBalance: GPv2Order.BALANCE_ERC20,
+            buyTokenBalance: GPv2Order.BALANCE_ERC20
+        });
+        assertEq(
+            instr.orderId, GPv2Order.hash(expectedOrder, IGPv2Settlement(mainnet.COW_SETTLEMENT).domainSeparator())
+        );
     }
 
     function test_BuildLimitOrderInstructions_BuyOrder() public view {
@@ -51,7 +69,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
         IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
 
         assertEq(instr.sellToken, address(mainnet.USDC));
-        assertEq(instr.sellAmount, sellAmountMax * 10_020 / 10_000); // +20bps fee headroom
+        assertEq(instr.sellAmount, sellAmountMax * 10_020 / 10_000); // sell amount grossed up 20bps for KIND_BUY
         assertEq(instr.approveTarget, mainnet.COW_VAULT_RELAYER);
         assertEq(instr.registerTarget, address(protocol));
     }
