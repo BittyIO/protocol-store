@@ -53,7 +53,8 @@ contract AaveV3Protocol is IBittyV1LendingProtocol, Ownable, Initializable {
         if (aToken == address(0)) {
             aToken = _getAToken(asset);
         }
-        IERC20(aToken).safeTransferFrom(msg.sender, address(this), amount);
+        uint256 transferAmount = amount == type(uint256).max ? IERC20(aToken).balanceOf(msg.sender) : amount;
+        IERC20(aToken).safeTransferFrom(msg.sender, address(this), transferAmount);
         IAaveV3(aaveV3).getPool().withdraw(asset, amount, msg.sender);
     }
 

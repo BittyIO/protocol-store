@@ -62,6 +62,25 @@ contract TestAaveProtocolFork is Test {
         assertEq(currentATokenBalance, 0);
     }
 
+    function test_WithdrawMax_FullExit() public {
+        IERC20(address(mainnet.WETH)).forceApprove(address(aaveProtocol), 1 ether);
+        deal(address(mainnet.WETH), address(this), 1 ether);
+        uint256 balanceBeforeSupply = IERC20(address(mainnet.WETH)).balanceOf(address(this));
+        aaveProtocol.supply(address(mainnet.WETH), 1 ether);
+
+        address aToken = aaveProtocol.receiptTokenOf(address(mainnet.WETH));
+        IERC20(aToken).forceApprove(address(aaveProtocol), type(uint256).max);
+
+        aaveProtocol.withdraw(address(mainnet.WETH), type(uint256).max);
+
+        assertEq(IERC20(aToken).balanceOf(address(this)), 0, "all aTokens withdrawn");
+        assertEq(IERC20(address(mainnet.WETH)).balanceOf(address(aaveProtocol)), 0, "no dust left in protocol");
+        (uint256 currentATokenBalance,,,,,,,,) =
+            poolDataProvider.getUserReserveData(address(mainnet.WETH), address(this));
+        assertEq(currentATokenBalance, 0, "supplied balance fully exited");
+        assertApproxEqAbs(IERC20(address(mainnet.WETH)).balanceOf(address(this)), balanceBeforeSupply, 5);
+    }
+
     function test_GetBalance() public {
         uint256 balanceBefore = aaveProtocol.getSuppliedBalance(address(mainnet.WETH));
         assertEq(balanceBefore, 0);
