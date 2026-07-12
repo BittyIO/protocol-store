@@ -68,12 +68,13 @@ contract TestAaveV3ProtocolSepoliaFork is Test {
         assertEq(balanceAfter, currentATokenBalance);
     }
 
-    function test_Supply_ResetsApprovalToZero() public {
+    function test_Supply_UsesMaxApproval() public {
         deal(sepolia.AAVE_WETH, address(this), 1 ether);
         IERC20(sepolia.AAVE_WETH).forceApprove(address(aaveProtocol), 1 ether);
         aaveProtocol.supply(sepolia.AAVE_WETH, 1 ether);
 
         address pool = address(IAaveV3(sepolia.AAVE_V3).getPool());
-        assertEq(IERC20(sepolia.AAVE_WETH).allowance(address(aaveProtocol), pool), 0);
+        uint256 remaining = IERC20(sepolia.AAVE_WETH).allowance(address(aaveProtocol), pool);
+        assertGe(remaining, type(uint256).max / 2, "pool must keep a standing max approval after supply");
     }
 }

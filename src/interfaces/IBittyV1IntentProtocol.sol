@@ -5,8 +5,11 @@ import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
 
 error OrderNotExpired();
 
-/// @dev Reverts when a TWAP order is created for a sell token that already has an active TWAP.
-error ActiveTwapExists(address sellToken);
+/**
+ * @dev Reverts when a TWAP with an identical id (same params + block-timestamp salt) is already
+ *      registered — i.e. a genuine duplicate created in the same block. Retry in a later block.
+ */
+error TwapAlreadyRegistered(bytes32 twapId);
 
 /**
  * @title IBittyV1IntentProtocol
@@ -56,10 +59,17 @@ interface IBittyV1IntentProtocol is IBittyV1Protocol {
         view
         returns (OrderInstructions memory instructions);
 
-    /// @notice Build registration instructions for a TWAP order. View only — no state change.
-    /// @param data abi.encode(sellToken, totalSellAmount, buyToken, minPartLimit, n, partDuration, span)
-    /// @return instructions  order registration + approval instructions
-    /// @return expiresAt     timestamp after which the last slot has expired
+    /**
+     * @notice Build registration instructions for a TWAP order. View only — no state change.
+     * @param data abi.encode(sellToken, totalSellAmount, buyToken, minPartLimit, n, partDuration, span)
+     *             The implementation derives the fee-bearing appData hash on-chain from block.timestamp
+     *             (the salt) — the caller never supplies appData, so the 0.2% partner fee cannot be
+     *             stripped. Distinct block timestamps keep each TWAP's generated CoW part orders unique,
+     *             so multiple TWAPs can share a sell token. The off-chain layer must post the
+     *             byte-identical fullAppData for that timestamp to the CoW API.
+     * @return instructions  order registration + approval instructions
+     * @return expiresAt     timestamp after which the last slot has expired
+     */
     function buildTwapInstructions(bytes memory data)
         external
         view

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IBittyV1IntentProtocol} from "../../interfaces/IBittyV1IntentProtocol.sol";
+import {IBittyV1IntentProtocol, TwapAlreadyRegistered} from "../../interfaces/IBittyV1IntentProtocol.sol";
 import {IGPv2Settlement} from "../../libs/cow/IGPv2Settlement.sol";
 import {GPv2Order} from "../../libs/cow/GPv2Order.sol";
 import {IERC1271} from "../../libs/cow/IERC1271.sol";
@@ -9,6 +9,7 @@ import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
+import {Strings} from "openzeppelin-contracts/contracts/utils/Strings.sol";
 
 /**
  * @title CoWSwapV1Protocol
@@ -26,6 +27,8 @@ import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initia
  *         TWAP orders          → twapOrders[id]; current part hash computed on-the-fly each window
  */
 contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initializable {
+    using Strings for uint256;
+
     struct TwapParams {
         address sellToken;
         address buyToken;
@@ -35,6 +38,15 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
         uint32 partDuration;
         uint32 span; // execution window per part; 0 = full partDuration
         uint32 n; // total number of parts
+        // Per-TWAP CoW appData hash, DERIVED ON-CHAIN by twapAppData(salt) — never taken
+        // from the caller. It is keccak256 of a fee-bearing appData document whose
+        // partnerFee {bps, recipient} is baked into this contract as constants, with only
+        // the free-form `environment` field varied by the caller's salt. This guarantees
+        // every TWAP part the vault signs carries the 0.2% partner fee (a user cannot
+        // create a fee-free TWAP), while distinct salts keep each TWAP's part-order UIDs
+        // unique so multiple TWAPs can share a sell token without colliding at settlement.
+        // The off-chain layer must post the byte-identical fullAppData to the CoW API.
+        bytes32 appData;
     }
 
     bytes4 private constant MAGICVALUE = 0x1626ba7e;
@@ -50,6 +62,32 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
 
     // keccak256('{"appCode":"BittyVault","metadata":{"partnerFee":{"bps":20,"recipient":"0x12EE2de7BF086388B1D560eb95e7191Edfab9823"}},"version":"1.3.0"}')
     bytes32 public constant APP_DATA = 0xdd81467643ffa93587d2dcaa8d583d5d953920b659e6c8f7235c8d613f737693;
+
+    // Fee-bearing appData document for TWAPs, split around the per-TWAP salt. The salt is
+    // placed in the free-form `environment` field (root `additionalProperties:false` forbids
+    // custom keys). Keys are alphabetical + compact to match CoW's canonical serialization.
+    // The partnerFee block below is identical to APP_DATA's, so TWAP fees are enforced on-chain.
+    // Full document = TWAP_APP_DATA_PREFIX + Strings.toString(salt) + TWAP_APP_DATA_SUFFIX.
+    string private constant TWAP_APP_DATA_PREFIX = '{"appCode":"BittyVault","environment":"';
+    string private constant TWAP_APP_DATA_SUFFIX =
+        '","metadata":{"partnerFee":{"bps":20,"recipient":"0x12EE2de7BF086388B1D560eb95e7191Edfab9823"}},"version":"1.3.0"}';
+
+    /**
+     * @notice The exact fee-bearing appData JSON string a TWAP with `salt` commits to.
+     *         The off-chain layer must PUT this byte-for-byte to the CoW API so solvers
+     *         can resolve the hash and apply the partner fee.
+     */
+    function twapFullAppData(uint256 salt) public pure returns (string memory) {
+        return string.concat(TWAP_APP_DATA_PREFIX, salt.toString(), TWAP_APP_DATA_SUFFIX);
+    }
+
+    /**
+     * @notice keccak256 of twapFullAppData(salt) — the appData hash baked into every part
+     *         order of the TWAP. Exposed so the frontend can cross-check its own hash.
+     */
+    function twapAppData(uint256 salt) public pure returns (bytes32) {
+        return keccak256(bytes(twapFullAppData(salt)));
+    }
 
     IGPv2Settlement public immutable settlement;
     address public immutable vaultRelayer;
@@ -135,6 +173,9 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
      *         Part i is executable from (startTime + i*partDuration) to (partStart + effectiveSpan).
      *         After registration the caller must post each part to CoW API at the start of its window.
      * @param data abi.encode(sellToken, totalSellAmount, buyToken, minPartLimit, n, partDuration, span)
+     *             The fee-bearing appData hash is derived on-chain via twapAppData(block.timestamp) — the
+     *             caller supplies no appData/salt, so the 0.2% partner fee cannot be stripped. Distinct
+     *             block timestamps keep concurrent TWAPs on the same sell token from colliding at settlement.
      */
     function buildTwapInstructions(bytes memory data)
         external
@@ -152,6 +193,11 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
             uint256 span_
         ) = abi.decode(data, (address, uint256, address, uint256, uint256, uint256, uint256));
 
+        // Salt = block.timestamp. The vault gets its own clone, so msg.sender/address(this) add no
+        // extra uniqueness; the block timestamp is the only entropy that matters and lets the
+        // off-chain layer reconstruct the exact appData document from the mined block.
+        bytes32 appData_ = twapAppData(block.timestamp);
+
         uint256 sellAmountPerPart = totalSellAmount_ / n;
 
         TwapParams memory params = TwapParams({
@@ -162,7 +208,8 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
             startTime: uint32(block.timestamp),
             partDuration: uint32(partDuration_),
             span: uint32(span_),
-            n: uint32(n)
+            n: uint32(n),
+            appData: appData_
         });
 
         bytes32 twapId = keccak256(abi.encode(params, owner()));
@@ -182,6 +229,10 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
     // ============ TWAP registry ============
 
     function registerTwap(bytes32 twapId, TwapParams calldata params) external onlyOwner {
+        // twapId derives from (params, owner) and params carries a unique appData salt,
+        // so a pre-existing entry means a genuine duplicate — reject it rather than
+        // pushing a second _activeTwapIds entry that could never be cleanly cancelled.
+        if (twapOrders[twapId].n != 0) revert TwapAlreadyRegistered(twapId);
         twapOrders[twapId] = params;
         _activeTwapIds.push(twapId);
     }
@@ -308,7 +359,7 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
             sellAmount: p.sellAmountPerPart,
             buyAmount: p.buyAmountMinPerPart,
             validTo: partEnd,
-            appData: APP_DATA,
+            appData: p.appData,
             feeAmount: 0,
             kind: GPv2Order.KIND_SELL,
             partiallyFillable: false,

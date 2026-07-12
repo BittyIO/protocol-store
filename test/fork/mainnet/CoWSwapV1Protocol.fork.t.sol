@@ -223,6 +223,63 @@ contract TestCoWSwapV1ProtocolFork is Test {
         );
     }
 
+    /**
+     * @dev The appData is derived on-chain from a fee-bearing document whose partnerFee is baked into
+     *      the contract — a caller can never create a fee-free TWAP. This asserts the on-chain document
+     *      and hash match the byte-exact string the off-chain layer (web/skills) must PUT to the CoW API.
+     */
+    function test_TwapAppData_MatchesFeeBearingDocument() public view {
+        uint256 salt = 1717171717; // stand-in for a mined block.timestamp
+        string memory expectedDoc = string.concat(
+            '{"appCode":"BittyVault","environment":"',
+            "1717171717",
+            '","metadata":{"partnerFee":{"bps":20,"recipient":"0x12EE2de7BF086388B1D560eb95e7191Edfab9823"}},"version":"1.3.0"}'
+        );
+        assertEq(protocol.twapFullAppData(salt), expectedDoc, "on-chain appData document must be byte-exact");
+        assertEq(protocol.twapAppData(salt), keccak256(bytes(expectedDoc)), "appData hash mismatch");
+    }
+
+    /**
+     * @dev Two TWAPs on the same sell token created in different blocks get distinct block-timestamp
+     *      salts -> distinct appData -> distinct ids and current-part hashes, so they never collide at
+     *      the CoW settlement layer. This is what lets multiple TWAPs share a sell token.
+     */
+    function test_Twap_DistinctBlocks_ProduceDistinctPartHashes() public {
+        (IBittyV1IntentProtocol.OrderInstructions memory a,) =
+            protocol.buildTwapInstructions(_buildTwapData(3, 3600, 0));
+
+        vm.warp(block.timestamp + 1); // next block -> different timestamp salt
+        (IBittyV1IntentProtocol.OrderInstructions memory b,) =
+            protocol.buildTwapInstructions(_buildTwapData(3, 3600, 0));
+        assertTrue(a.orderId != b.orderId, "distinct block timestamps -> distinct twap ids");
+
+        vm.startPrank(VAULT);
+        (bool ok,) = address(protocol).call(a.registerCalldata);
+        assertTrue(ok);
+        (ok,) = address(protocol).call(b.registerCalldata);
+        assertTrue(ok);
+        vm.stopPrank();
+
+        assertEq(protocol.activeTwapIds().length, 2);
+        assertTrue(
+            protocol.getCurrentTwapPartHash(a.orderId) != protocol.getCurrentTwapPartHash(b.orderId),
+            "distinct salts -> distinct part hashes"
+        );
+    }
+
+    function test_RegisterTwap_DuplicateInSameBlockReverts() public {
+        // Identical params in the same block share the block-timestamp salt -> identical twapId -> reject.
+        (IBittyV1IntentProtocol.OrderInstructions memory instr,) =
+            protocol.buildTwapInstructions(_buildTwapData(3, 3600, 0));
+
+        vm.startPrank(VAULT);
+        (bool ok,) = address(protocol).call(instr.registerCalldata);
+        assertTrue(ok);
+        (ok,) = address(protocol).call(instr.registerCalldata);
+        assertFalse(ok, "duplicate twapId registration must revert");
+        vm.stopPrank();
+    }
+
     function test_BuildTwapInstructions_StoresParams() public {
         bytes memory data = _buildTwapData(4, 3600, 0);
         (IBittyV1IntentProtocol.OrderInstructions memory instr, uint256 expiresAt) =
