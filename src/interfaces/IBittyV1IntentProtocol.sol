@@ -13,7 +13,8 @@ error TwapAlreadyRegistered(bytes32 twapId);
 
 /**
  * @title IBittyV1IntentProtocol
- * @notice Generic interface for vault-custodian intent protocols (CoW Swap, UniswapX, etc.).
+ * @notice Generic interface for vault-custodian intent protocols (CoW Swap, etc.). Protocol-agnostic
+ *         by design: a new intent protocol implements this and the vault drives it unchanged.
  *
  *         The vault is the ERC-1271 signer and token custodian for all intent orders.
  *         The protocol clone is a pure instruction builder — it never holds tokens.
@@ -22,10 +23,9 @@ error TwapAlreadyRegistered(bytes32 twapId);
  *           1. AssetManagerLogic calls buildLimitOrderInstructions() or buildTwapInstructions()
  *              (view call on clone — no state change).
  *           2. The vault executes OrderInstructions.registerCalldata on registerTarget
- *              (e.g. composableCow.create(), UniswapX reactor.execute()) in its own context,
- *              so the order is registered under the vault's address.
- *           3. The vault grants allowance of sellAmount to approveTarget
- *              (e.g. CoW vaultRelayer, UniswapX reactor).
+ *              (e.g. composableCow.create()) in its own context, so the order is registered under the
+ *              vault's address.
+ *           3. The vault grants allowance of sellAmount to approveTarget (e.g. CoW vaultRelayer).
  *           4. The vault's isValidSignature() iterates registered protocol clones and delegates
  *              to each clone's isValidSignature() until one returns the EIP-1271 magic value.
  *           5. On cancel, AssetManagerLogic executes CancelInstructions.cancelCalldata on

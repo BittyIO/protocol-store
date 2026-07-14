@@ -29,12 +29,6 @@ library mainnet {
     address public constant COW_SETTLEMENT = 0x9008D19f58AAbD9eD0D60971565AA8510560ab41;
     address public constant COW_VAULT_RELAYER = 0xC92E8bdf79f0507f65a392b0ab4667716BFE0110;
 
-    // UniswapX Protocol
-    // Permit2 (canonical, same address on all chains) is the input-token transfer spender.
-    address public constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
-    // ExclusiveDutchOrderReactor (UniswapX V1) — the Permit2 witness `spender`.
-    address public constant UNISWAPX_REACTOR = 0x6000da47483062A0D734Ba3dc7576Ce6A0B645C4;
-
     address public constant BITTY_GUARD = 0x00000000a63B8e2F5B96e3631953667A94e651dd;
 }
 
