@@ -6,6 +6,10 @@ import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
 error UnstakeMoreThanStaked();
 error InvalidAsset();
 error ClaimUnstakedNotSupported();
+// Thrown by protocols whose unstake settles asynchronously (e.g. Lido's
+// withdrawal queue): they cannot deliver the asset to a recipient in the same
+// transaction, so on-behalf unstaking is not supported.
+error UnstakeToNotSupported();
 
 /**
  * @title IBittyV1StakingProtocol
@@ -36,6 +40,19 @@ interface IBittyV1StakingProtocol is IBittyV1Protocol {
      * @param amount The amount of the asset.
      */
     function unstake(address asset, uint256 amount) external;
+
+    /**
+     * @notice Unstake the asset and deliver the unstaked asset directly to `recipient`.
+     * @dev Same as {unstake} but the redeemed asset is sent to `recipient` instead of
+     * the caller. This lets the vault pay a receiver straight out of a staked position in
+     * a single step. Only supported by protocols that settle synchronously; asynchronous
+     * ones (Lido) revert with {UnstakeToNotSupported}.
+     * @param asset The address of the asset.
+     * @param amount The amount of the asset to unstake.
+     * @param recipient The address that receives the unstaked asset.
+     * @return delivered The amount of `asset` delivered to `recipient`.
+     */
+    function unstakeTo(address asset, uint256 amount, address recipient) external returns (uint256 delivered);
 
     /**
      * @notice Get the unstake request ids.

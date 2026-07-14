@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IBittyV1StakingProtocol, UnstakeMoreThanStaked, InvalidAsset} from "../interfaces/IBittyV1StakingProtocol.sol";
+import {
+    IBittyV1StakingProtocol,
+    UnstakeMoreThanStaked,
+    InvalidAsset,
+    UnstakeToNotSupported
+} from "../interfaces/IBittyV1StakingProtocol.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
@@ -89,6 +94,15 @@ contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         }
         uint256[] memory requestIds = unstETH.requestWithdrawals(amounts, address(this));
         _unstakeRequests.add(requestIds[0]);
+    }
+
+    /**
+     * @notice Not supported: Lido withdrawals settle asynchronously via a queue, so the
+     * asset cannot be delivered to a recipient in the same transaction.
+     * @dev Always reverts with {UnstakeToNotSupported}. Use {unstake} then {claimUnstaked}.
+     */
+    function unstakeTo(address, uint256, address) external view override onlyOwner returns (uint256) {
+        revert UnstakeToNotSupported();
     }
 
     function claimUnstaked(uint256[] memory requestIds) external override onlyOwner {
