@@ -112,10 +112,26 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
      *         to the CoW API with signingScheme=eip1271. No composableCow involvement.
      * @param data abi.encode(sellToken, sellAmount, buyToken, buyAmountMin[, validTo[, isSellOrder]])
      */
-    function buildLimitOrderInstructions(bytes memory data)
+    /**
+     * @notice Build a limit order whose bought token settles to `recipient`.
+     * @dev Pass the vault as `recipient` for a normal order, or a receiver to have CoW settle the buy
+     * token straight to it. The receiver is part of the order hash, so the registered digest (and thus
+     * what isValidSignature authorizes) is bound to this exact recipient.
+     * @param data abi.encode(sellToken, sellAmount, buyToken, buyAmountMin[, validTo[, isSellOrder]])
+     * @param recipient The address that receives the bought token.
+     */
+    function buildLimitOrderInstructions(bytes memory data, address recipient)
         external
         view
         override
+        returns (IBittyV1IntentProtocol.OrderInstructions memory instructions)
+    {
+        return _buildLimitOrder(data, recipient);
+    }
+
+    function _buildLimitOrder(bytes memory data, address receiver_)
+        internal
+        view
         returns (IBittyV1IntentProtocol.OrderInstructions memory instructions)
     {
         (
@@ -133,7 +149,7 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
         GPv2Order.Data memory order = GPv2Order.Data({
             sellToken: IERC20(sellToken_),
             buyToken: IERC20(buyToken),
-            receiver: owner(),
+            receiver: receiver_,
             sellAmount: adjustedSellAmount,
             buyAmount: adjustedBuyAmount,
             validTo: validTo,

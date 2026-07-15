@@ -98,7 +98,7 @@ contract TestUniswapProtocolFork is Test {
         deal(address(mainnet.WETH), address(this), sellAmount);
         IERC20(address(mainnet.WETH)).forceApprove(address(v3Protocol), sellAmount);
 
-        v3Protocol.swap(swapData);
+        v3Protocol.swap(swapData, address(this));
 
         uint256 usdtBalanceAfter = IERC20(address(mainnet.USDT)).balanceOf(address(this));
         assertGt(usdtBalanceAfter, usdtBalanceBefore);
@@ -126,11 +126,64 @@ contract TestUniswapProtocolFork is Test {
         deal(address(mainnet.USDC), address(this), sellAmount);
         IERC20(address(mainnet.USDC)).forceApprove(address(v3Protocol), sellAmount);
 
-        v3Protocol.swap(swapData);
+        v3Protocol.swap(swapData, address(this));
 
         uint256 wethBalanceAfter = IERC20(address(mainnet.WETH)).balanceOf(address(this));
         assertGt(wethBalanceAfter, wethBalanceBefore);
         assertGe(wethBalanceAfter - wethBalanceBefore, buyAmountMin);
+    }
+
+    function test_V3_SwapTo_DeliversOutputToRecipient() public {
+        address recipient = makeAddr("swap-recipient");
+        address[] memory path = new address[](2);
+        path[0] = address(mainnet.USDC);
+        path[1] = address(mainnet.WETH);
+        uint24[] memory fees = new uint24[](1);
+        fees[0] = 500;
+        bytes memory encodedPath = Path.encodePath(path, fees);
+
+        uint256 price = _getV3PoolPrice(address(mainnet.USDC), address(mainnet.WETH), 3000);
+        uint256 sellAmount = 1000 * 1e6;
+        uint256 buyAmountMin = Math.mulDiv(Math.mulDiv(sellAmount, 1e18, price), 95, 100);
+        bytes memory swapData = abi.encode(path[0], sellAmount, path[1], buyAmountMin, encodedPath);
+
+        deal(address(mainnet.USDC), address(this), sellAmount);
+        IERC20(address(mainnet.USDC)).forceApprove(address(v3Protocol), sellAmount);
+
+        uint256 ownerWethBefore = IERC20(address(mainnet.WETH)).balanceOf(address(this));
+        v3Protocol.swap(swapData, recipient);
+
+        // Output goes to the recipient, not the caller (owner).
+        assertGe(IERC20(address(mainnet.WETH)).balanceOf(recipient), buyAmountMin, "recipient receives output");
+        assertEq(IERC20(address(mainnet.WETH)).balanceOf(address(this)), ownerWethBefore, "owner gets no swap output");
+    }
+
+    function test_V3_SwapExactOutTo_DeliversOutputToRecipient() public {
+        address recipient = makeAddr("swapout-recipient");
+        address[] memory path = new address[](2);
+        path[0] = address(mainnet.WETH); // reversed path: buyToken(USDT) -> ... -> sellToken(WETH)
+        path[1] = address(mainnet.USDT);
+        uint24[] memory fees = new uint24[](1);
+        fees[0] = 3000;
+        // exactOutput takes the path reversed (tokenOut first).
+        address[] memory reversed = new address[](2);
+        reversed[0] = address(mainnet.USDT);
+        reversed[1] = address(mainnet.WETH);
+        bytes memory encodedPath = Path.encodePath(reversed, fees);
+
+        uint256 amountOut = 500 * 1e6; // 500 USDT
+        uint256 amountInMaximum = 1 ether;
+        bytes memory swapData =
+            abi.encode(address(mainnet.WETH), amountInMaximum, address(mainnet.USDT), amountOut, encodedPath);
+
+        deal(address(mainnet.WETH), address(this), amountInMaximum);
+        IERC20(address(mainnet.WETH)).forceApprove(address(v3Protocol), amountInMaximum);
+
+        uint256 ownerUsdtBefore = IERC20(address(mainnet.USDT)).balanceOf(address(this));
+        v3Protocol.swapExactOut(swapData, recipient);
+
+        assertEq(IERC20(address(mainnet.USDT)).balanceOf(recipient), amountOut, "recipient receives exact output");
+        assertEq(IERC20(address(mainnet.USDT)).balanceOf(address(this)), ownerUsdtBefore, "owner gets no swap output");
     }
 
     function test_V3_SwapUSDTToWETH() public {
@@ -154,7 +207,7 @@ contract TestUniswapProtocolFork is Test {
         deal(address(mainnet.USDT), address(this), sellAmount);
         IERC20(address(mainnet.USDT)).forceApprove(address(v3Protocol), sellAmount);
 
-        v3Protocol.swap(swapData);
+        v3Protocol.swap(swapData, address(this));
 
         uint256 wethBalanceAfter = IERC20(address(mainnet.WETH)).balanceOf(address(this));
         assertGt(wethBalanceAfter, wethBalanceBefore);
@@ -189,7 +242,7 @@ contract TestUniswapProtocolFork is Test {
         deal(address(mainnet.USDC), address(this), sellAmount);
         IERC20(address(mainnet.USDC)).forceApprove(address(v3Protocol), sellAmount);
 
-        v3Protocol.swap(swapData);
+        v3Protocol.swap(swapData, address(this));
 
         uint256 usdtBalanceAfter = IERC20(address(mainnet.USDT)).balanceOf(address(this));
         assertGt(usdtBalanceAfter, usdtBalanceBefore);
@@ -218,7 +271,7 @@ contract TestUniswapProtocolFork is Test {
         deal(address(mainnet.USDC), address(this), sellAmount);
         IERC20(address(mainnet.USDC)).forceApprove(address(v3Protocol), sellAmount);
 
-        v3Protocol.swap(swapData);
+        v3Protocol.swap(swapData, address(this));
 
         assertEq(
             IERC20(address(mainnet.USDC)).balanceOf(FEE_RECIPIENT) - feeRecipientBefore,
@@ -248,7 +301,7 @@ contract TestUniswapProtocolFork is Test {
         deal(address(mainnet.WETH), address(this), sellAmount);
         IERC20(address(mainnet.WETH)).forceApprove(address(v3Protocol), sellAmount);
 
-        v3Protocol.swap(swapData);
+        v3Protocol.swap(swapData, address(this));
 
         _assertFeeSplit(
             IERC20(address(mainnet.USDT)).balanceOf(FEE_RECIPIENT) - feeRecipientBefore,
@@ -278,7 +331,7 @@ contract TestUniswapProtocolFork is Test {
         uint256 ownerBefore = IERC20(address(mainnet.WETH)).balanceOf(address(this));
         uint256 usdtBefore = IERC20(address(mainnet.USDT)).balanceOf(address(this));
 
-        v3Protocol.swapExactOut(swapData);
+        v3Protocol.swapExactOut(swapData, address(this));
 
         assertEq(IERC20(address(mainnet.USDT)).balanceOf(address(this)) - usdtBefore, amountOut, "exact buy amount");
 
@@ -321,7 +374,7 @@ contract TestUniswapProtocolFork is Test {
         IERC20(tokenIn).forceApprove(address(v3Protocol), sellAmount);
 
         vm.expectRevert();
-        v3Protocol.swap(swapData);
+        v3Protocol.swap(swapData, address(this));
 
         assertEq(IERC20(tokenIn).balanceOf(address(this)), tokenInBalanceBefore + sellAmount, "tokenIn returned");
         assertEq(IERC20(tokenOut).balanceOf(address(this)), tokenOutBalanceBefore, "tokenOut unchanged");

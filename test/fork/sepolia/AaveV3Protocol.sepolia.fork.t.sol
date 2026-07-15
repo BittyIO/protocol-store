@@ -45,7 +45,7 @@ contract TestAaveV3ProtocolSepoliaFork is Test {
 
         address aToken = aaveProtocol.receiptTokenOf(sepolia.AAVE_WETH);
         IERC20(aToken).forceApprove(address(aaveProtocol), aTokenBalance);
-        aaveProtocol.withdraw(sepolia.AAVE_WETH, aTokenBalance);
+        aaveProtocol.withdraw(sepolia.AAVE_WETH, aTokenBalance, address(this));
 
         assertEq(IERC20(sepolia.AAVE_WETH).balanceOf(address(aaveProtocol)), 0);
         assertApproxEqAbs(IERC20(sepolia.AAVE_WETH).balanceOf(address(this)), balanceBeforeSupply, 5);

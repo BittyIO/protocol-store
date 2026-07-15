@@ -52,9 +52,15 @@ interface IBittyV1IntentProtocol is IBittyV1Protocol {
     event TwapCreated(bytes32 indexed twapId, address indexed vault);
     event TwapCancelled(bytes32 indexed twapId, address indexed vault);
 
-    /// @notice Build registration instructions for a single limit order. View only — no state change.
-    /// @param data abi.encode(sellToken, sellAmount, buyToken, buyAmountMin[, validTo[, isSellOrder]])
-    function buildLimitOrderInstructions(bytes memory data)
+    /**
+     * @notice Build registration instructions for a single limit order whose proceeds settle to
+     * `recipient`. View only — no state change. Pass the vault as `recipient` for a normal order, or a
+     * receiver to settle straight to it. The receiver is bound into the order hash the vault registers
+     * and authorizes via isValidSignature.
+     * @param data abi.encode(sellToken, sellAmount, buyToken, buyAmountMin[, validTo[, isSellOrder]])
+     * @param recipient The address that receives the bought token.
+     */
+    function buildLimitOrderInstructions(bytes memory data, address recipient)
         external
         view
         returns (OrderInstructions memory instructions);

@@ -77,7 +77,20 @@ contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         return _unstakeRequests.values();
     }
 
-    function unstake(address asset, uint256 amount) external override onlyOwner {
+    /**
+     * @notice Begin unstaking. Lido withdrawals settle asynchronously via a queue, so the asset
+     * cannot be delivered to a receiver in the same transaction — `recipient` must therefore be the
+     * vault itself (the owner). On-behalf delivery to any other address reverts with
+     * {UnstakeToNotSupported}; use {unstake} then {claimUnstaked}.
+     * @return delivered Always 0 — nothing is delivered synchronously (settlement is queued).
+     */
+    function unstake(address asset, uint256 amount, address recipient)
+        external
+        override
+        onlyOwner
+        returns (uint256 delivered)
+    {
+        if (recipient != owner()) revert UnstakeToNotSupported();
         if (asset != address(weth)) {
             revert InvalidAsset();
         }
@@ -94,15 +107,7 @@ contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         }
         uint256[] memory requestIds = unstETH.requestWithdrawals(amounts, address(this));
         _unstakeRequests.add(requestIds[0]);
-    }
-
-    /**
-     * @notice Not supported: Lido withdrawals settle asynchronously via a queue, so the
-     * asset cannot be delivered to a recipient in the same transaction.
-     * @dev Always reverts with {UnstakeToNotSupported}. Use {unstake} then {claimUnstaked}.
-     */
-    function unstakeTo(address, uint256, address) external view override onlyOwner returns (uint256) {
-        revert UnstakeToNotSupported();
+        return 0;
     }
 
     function claimUnstaked(uint256[] memory requestIds) external override onlyOwner {

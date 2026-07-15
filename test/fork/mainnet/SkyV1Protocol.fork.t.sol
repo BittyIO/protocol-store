@@ -105,7 +105,7 @@ contract TestSkyV1ProtocolFork is Test {
         uint256 stakedBalance = skyProtocol.getStakedBalance(mainnet.USDC);
         uint256 usdcBefore = usdc.balanceOf(address(this));
 
-        skyProtocol.unstake(mainnet.USDC, stakedBalance);
+        skyProtocol.unstake(mainnet.USDC, stakedBalance, address(this));
 
         assertGt(usdc.balanceOf(address(this)), usdcBefore);
         assertApproxEqAbs(usdc.balanceOf(address(this)) - usdcBefore, stakedBalance, stakedBalance / 100);
@@ -119,7 +119,7 @@ contract TestSkyV1ProtocolFork is Test {
 
         IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
         uint256 stakedBalance = skyProtocol.getStakedBalance(mainnet.USDC);
-        skyProtocol.unstake(mainnet.USDC, stakedBalance);
+        skyProtocol.unstake(mainnet.USDC, stakedBalance, address(this));
 
         assertGe(usds.allowance(address(skyProtocol), mainnet.SKY_PSM), type(uint256).max / 2);
     }
@@ -131,7 +131,7 @@ contract TestSkyV1ProtocolFork is Test {
 
         IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
         uint256 usdcBefore = usdc.balanceOf(address(this));
-        skyProtocol.unstake(mainnet.USDC, type(uint256).max);
+        skyProtocol.unstake(mainnet.USDC, type(uint256).max, address(this));
 
         assertEq(sUsds.balanceOf(address(this)), 0, "all sUSDS shares redeemed");
         assertApproxEqAbs(usdc.balanceOf(address(this)) - usdcBefore, STAKE_AMOUNT, STAKE_AMOUNT / 100);
@@ -147,15 +147,15 @@ contract TestSkyV1ProtocolFork is Test {
 
         uint256 gross = skyProtocol.getStakedBalance(mainnet.USDC);
         vm.expectRevert();
-        skyProtocol.unstake(mainnet.USDC, gross);
+        skyProtocol.unstake(mainnet.USDC, gross, address(this));
 
-        skyProtocol.unstake(mainnet.USDC, type(uint256).max);
+        skyProtocol.unstake(mainnet.USDC, type(uint256).max, address(this));
         assertEq(sUsds.balanceOf(address(this)), 0, "full exit works with a non-zero PSM toll");
     }
 
     function test_Unstake_RevertOnWrongAsset() public {
         vm.expectRevert(InvalidAsset.selector);
-        skyProtocol.unstake(mainnet.WETH, 1 ether);
+        skyProtocol.unstake(mainnet.WETH, 1 ether, address(this));
     }
 
     function test_GetUnstakeRequestIds_AlwaysEmpty() public view {

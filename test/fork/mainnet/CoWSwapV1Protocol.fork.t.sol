@@ -31,7 +31,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
         uint32 validTo = uint32(block.timestamp + 3600);
         bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
 
-        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data, VAULT);
 
         assertEq(instr.sellToken, address(mainnet.USDC));
         assertEq(instr.sellAmount, sellAmount);
@@ -59,6 +59,39 @@ contract TestCoWSwapV1ProtocolFork is Test {
         );
     }
 
+    function test_BuildLimitOrderInstructionsTo_SetsRecipientAsReceiver() public view {
+        address recipient = address(0xBEEF);
+        uint256 sellAmount = 1000e6;
+        uint32 validTo = uint32(block.timestamp + 3600);
+        bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
+
+        IBittyV1IntentProtocol.OrderInstructions memory toInstr = protocol.buildLimitOrderInstructions(data, recipient);
+        IBittyV1IntentProtocol.OrderInstructions memory vaultInstr = protocol.buildLimitOrderInstructions(data, VAULT);
+
+        // The order hash is bound to the receiver, so a recipient order differs from a vault order.
+        assertTrue(toInstr.orderId != vaultInstr.orderId, "distinct receiver -> distinct order hash");
+
+        GPv2Order.Data memory expectedOrder = GPv2Order.Data({
+            sellToken: IERC20(address(mainnet.USDC)),
+            buyToken: IERC20(address(mainnet.WETH)),
+            receiver: recipient,
+            sellAmount: sellAmount,
+            buyAmount: 1e15 * 9_980 / 10_000,
+            validTo: validTo,
+            appData: protocol.APP_DATA(),
+            feeAmount: 0,
+            kind: GPv2Order.KIND_SELL,
+            partiallyFillable: false,
+            sellTokenBalance: GPv2Order.BALANCE_ERC20,
+            buyTokenBalance: GPv2Order.BALANCE_ERC20
+        });
+        assertEq(
+            toInstr.orderId,
+            GPv2Order.hash(expectedOrder, IGPv2Settlement(mainnet.COW_SETTLEMENT).domainSeparator()),
+            "order hash matches an order whose receiver is the recipient"
+        );
+    }
+
     function test_BuildLimitOrderInstructions_BuyOrder() public view {
         uint256 buyAmount = 1e18;
         uint256 sellAmountMax = 5000e6;
@@ -66,7 +99,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
         bytes memory data =
             abi.encode(address(mainnet.USDC), sellAmountMax, address(mainnet.WETH), buyAmount, validTo, false);
 
-        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data, VAULT);
 
         assertEq(instr.sellToken, address(mainnet.USDC));
         assertEq(instr.sellAmount, sellAmountMax * 10_020 / 10_000); // sell amount grossed up 20bps for KIND_BUY
@@ -89,7 +122,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
         uint32 validTo = uint32(block.timestamp + 3600);
         bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
 
-        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data, VAULT);
 
         vm.prank(VAULT);
         (bool ok,) = address(protocol).call(instr.registerCalldata);
@@ -110,7 +143,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
         uint32 validTo = uint32(block.timestamp + 3600);
         bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
 
-        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data, VAULT);
 
         vm.prank(VAULT);
         (bool ok,) = address(protocol).call(instr.registerCalldata);
@@ -141,7 +174,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
         uint32 validTo = uint32(block.timestamp + 3600);
         bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
 
-        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data, VAULT);
 
         vm.prank(VAULT);
         (bool ok,) = address(protocol).call(instr.registerCalldata);
@@ -156,7 +189,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
         uint32 validTo = uint32(block.timestamp + 3600);
         bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
 
-        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data, VAULT);
 
         vm.prank(VAULT);
         (bool ok,) = address(protocol).call(instr.registerCalldata);
@@ -171,7 +204,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
         uint32 validTo = uint32(block.timestamp + 3600);
         bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
 
-        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data, VAULT);
 
         vm.prank(VAULT);
         (bool ok,) = address(protocol).call(instr.registerCalldata);
@@ -186,7 +219,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
         uint32 validTo = uint32(block.timestamp + 3600);
         bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
 
-        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data, VAULT);
         // Do NOT register the order
 
         bytes4 result = protocol.isValidSignature(instr.orderId, "");
@@ -198,7 +231,7 @@ contract TestCoWSwapV1ProtocolFork is Test {
         uint32 validTo = uint32(block.timestamp + 3600);
         bytes memory data = abi.encode(address(mainnet.USDC), sellAmount, address(mainnet.WETH), 1e15, validTo, true);
 
-        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data);
+        IBittyV1IntentProtocol.OrderInstructions memory instr = protocol.buildLimitOrderInstructions(data, VAULT);
 
         vm.prank(VAULT);
         (bool ok,) = address(protocol).call(instr.registerCalldata);

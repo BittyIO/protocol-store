@@ -49,7 +49,7 @@ contract TestAaveProtocolFork is Test {
         address aToken = aaveProtocol.receiptTokenOf(address(mainnet.WETH));
         IERC20(aToken).forceApprove(address(aaveProtocol), aTokenBalance);
 
-        aaveProtocol.withdraw(address(mainnet.WETH), aTokenBalance);
+        aaveProtocol.withdraw(address(mainnet.WETH), aTokenBalance, address(this));
 
         uint256 aaveProtocolBalanceAfter = IERC20(address(mainnet.WETH)).balanceOf(address(aaveProtocol));
         assertEq(aaveProtocolBalanceAfter, 0);
@@ -71,7 +71,7 @@ contract TestAaveProtocolFork is Test {
         address aToken = aaveProtocol.receiptTokenOf(address(mainnet.WETH));
         IERC20(aToken).forceApprove(address(aaveProtocol), type(uint256).max);
 
-        aaveProtocol.withdraw(address(mainnet.WETH), type(uint256).max);
+        aaveProtocol.withdraw(address(mainnet.WETH), type(uint256).max, address(this));
 
         assertEq(IERC20(aToken).balanceOf(address(this)), 0, "all aTokens withdrawn");
         assertEq(IERC20(address(mainnet.WETH)).balanceOf(address(aaveProtocol)), 0, "no dust left in protocol");

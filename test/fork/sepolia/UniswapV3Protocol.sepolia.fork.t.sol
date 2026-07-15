@@ -57,7 +57,7 @@ contract TestUniswapProtocolSepoliaFork is Test {
         deal(address(sepolia.WETH9), address(this), sellAmount);
         IERC20(address(sepolia.WETH9)).forceApprove(address(v3Protocol), sellAmount);
 
-        v3Protocol.swap(swapData);
+        v3Protocol.swap(swapData, address(this));
 
         uint256 usdtBalanceAfter = IERC20(address(sepolia.USDT)).balanceOf(address(this));
         assertGt(usdtBalanceAfter, usdtBalanceBefore, "should receive USDT");
@@ -80,7 +80,7 @@ contract TestUniswapProtocolSepoliaFork is Test {
         uint256 wethBalanceBefore = IERC20(address(sepolia.WETH9)).balanceOf(address(this));
         deal(address(sepolia.USDT), address(this), sellAmount);
         IERC20(address(sepolia.USDT)).forceApprove(address(v3Protocol), sellAmount);
-        v3Protocol.swap(swapData);
+        v3Protocol.swap(swapData, address(this));
 
         uint256 wethBalanceAfter = IERC20(address(sepolia.WETH9)).balanceOf(address(this));
         assertGt(wethBalanceAfter, wethBalanceBefore, "should receive WETH");

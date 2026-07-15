@@ -6,9 +6,6 @@ import {
     InvalidAsset,
     ClaimUnstakedNotSupported
 } from "../interfaces/IBittyV1StakingProtocol.sol";
-
-// Reverts when an on-behalf unstake is asked to deliver to the zero address.
-error RecipientZero();
 import {IDssPsm, ISUsds} from "../libs/sky/Sky.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -85,31 +82,21 @@ contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
     }
 
     /**
-     * @notice Unstake the staked asset.
-     * @dev Redeems sUSDS → USDS, converts USDS → USDC via PSM, sends USDC to vault.
-     * @param asset Must be the USDC address.
-     * @param amount Amount of USDC (6 decimals) to unstake.
-     */
-    function unstake(address asset, uint256 amount) external override onlyOwner {
-        _unstake(asset, amount, msg.sender);
-    }
-
-    /**
-     * @notice Unstake the staked asset and send the redeemed USDC directly to `recipient`.
-     * @dev Sky settles synchronously, so the redeemed USDC is delivered to `recipient` in
-     * the same transaction instead of routing back through the caller.
+     * @notice Unstake the staked asset and deliver the redeemed USDC to `recipient`.
+     * @dev Redeems sUSDS → USDS, converts USDS → USDC via PSM. Sky settles synchronously, so the USDC
+     * is delivered to `recipient` in the same transaction. Pass the vault as `recipient` for a normal
+     * unstake, or a receiver to pay it straight out of the staked position.
      * @param asset Must be the USDC address.
      * @param amount Amount of USDC (6 decimals) to unstake.
      * @param recipient The address that receives the redeemed USDC.
      * @return delivered The amount of USDC delivered to `recipient`.
      */
-    function unstakeTo(address asset, uint256 amount, address recipient)
+    function unstake(address asset, uint256 amount, address recipient)
         external
         override
         onlyOwner
         returns (uint256 delivered)
     {
-        if (recipient == address(0)) revert RecipientZero();
         return _unstake(asset, amount, recipient);
     }
 

@@ -34,7 +34,19 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
 
     receive() external payable {}
 
-    function swap(bytes memory data) external payable override onlyOwner {
+    /**
+     * @notice Exact-input swap whose bought token is delivered to `recipient`.
+     * @dev Pass the vault as `recipient` for a normal swap, or a receiver to swap and pay it in one
+     * step. The 0.2% fee still goes to FEE_RECIPIENT and any unspent native ETH is refunded to the
+     * caller (the vault).
+     * @param data abi.encode(sellToken, sellAmount, buyToken, buyAmountMin, path)
+     * @param recipient The address that receives the bought token.
+     */
+    function swap(bytes memory data, address recipient) external payable override onlyOwner {
+        _swap(data, recipient);
+    }
+
+    function _swap(bytes memory data, address recipient) private {
         (address tokenIn, uint256 amountIn, address tokenOut, uint256 amountOutMinimum, bytes memory path) =
             abi.decode(data, (address, uint256, address, uint256, bytes));
 
@@ -79,14 +91,25 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
                 if (fee > 0) {
                     IERC20(tokenOut).safeTransfer(FEE_RECIPIENT, fee);
                 }
-                IERC20(tokenOut).safeTransfer(msg.sender, amountOut - fee);
+                IERC20(tokenOut).safeTransfer(recipient, amountOut - fee);
             } else {
-                IERC20(tokenOut).safeTransfer(msg.sender, amountOut);
+                IERC20(tokenOut).safeTransfer(recipient, amountOut);
             }
         }
     }
 
-    function swapExactOut(bytes memory data) external override onlyOwner {
+    /**
+     * @notice Exact-output swap whose bought token is delivered to `recipient`.
+     * @dev Pass the vault as `recipient` for a normal swap, or a receiver to swap and pay it in one
+     * step. The 0.2% fee still goes to FEE_RECIPIENT and any unspent input is refunded to the caller.
+     * @param data abi.encode(sellToken, sellAmountMax, buyToken, buyAmount, reversedPath)
+     * @param recipient The address that receives the bought token.
+     */
+    function swapExactOut(bytes memory data, address recipient) external override onlyOwner {
+        _swapExactOut(data, recipient);
+    }
+
+    function _swapExactOut(bytes memory data, address recipient) private {
         (address tokenIn, uint256 amountInMaximum, address tokenOut, uint256 amountOut, bytes memory path) =
             abi.decode(data, (address, uint256, address, uint256, bytes));
 
@@ -109,7 +132,7 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
         uint256 leftover = amountInMaximum - amountIn - fee;
         if (leftover > 0) IERC20(tokenIn).safeTransfer(msg.sender, leftover);
 
-        IERC20(tokenOut).safeTransfer(msg.sender, amountOut);
+        IERC20(tokenOut).safeTransfer(recipient, amountOut);
     }
 
     function addLiquidity(bytes memory data) external override onlyOwner {

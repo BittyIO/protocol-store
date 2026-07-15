@@ -8,9 +8,6 @@ import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/Safe
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
-// Reverts when an on-behalf withdraw is asked to deliver to the zero address.
-error RecipientZero();
-
 contract AaveV3Protocol is IBittyV1LendingProtocol, Ownable, Initializable {
     using SafeERC20 for IERC20;
     address public immutable aaveV3;
@@ -53,26 +50,22 @@ contract AaveV3Protocol is IBittyV1LendingProtocol, Ownable, Initializable {
         }
     }
 
-    function withdraw(address asset, uint256 amount) external override onlyOwner {
-        _withdraw(asset, amount, msg.sender);
-    }
-
     /**
-     * @notice Withdraw supplied asset and send it directly to `recipient`.
-     * @dev Aave settles synchronously, so the withdrawn asset is delivered to `recipient`
-     * in the same transaction instead of routing back through the caller.
+     * @notice Withdraw supplied asset and deliver it to `recipient`.
+     * @dev Aave settles synchronously, so the withdrawn asset is delivered to `recipient` in the same
+     * transaction. Pass the vault as `recipient` for a normal withdrawal, or a receiver to pay it
+     * straight out of the supplied position.
      * @param asset The address of the asset.
      * @param amount The amount to withdraw.
      * @param recipient The address that receives the withdrawn asset.
      * @return delivered The amount of `asset` delivered to `recipient`.
      */
-    function withdrawTo(address asset, uint256 amount, address recipient)
+    function withdraw(address asset, uint256 amount, address recipient)
         external
         override
         onlyOwner
         returns (uint256 delivered)
     {
-        if (recipient == address(0)) revert RecipientZero();
         return _withdraw(asset, amount, recipient);
     }
 
