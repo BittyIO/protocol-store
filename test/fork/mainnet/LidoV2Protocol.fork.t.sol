@@ -126,6 +126,10 @@ contract TestLidoProtocolFork is Test {
         LidoV2Protocol protocol = new LidoV2Protocol(mainnet.STETH, address(mockUnstETH), mainnet.WETH);
         protocol.initialize(address(this));
 
+        deal(address(weth), address(this), claimAmount);
+        weth.approve(address(protocol), claimAmount);
+        protocol.stake(address(weth), claimAmount);
+
         uint256 wethBefore = weth.balanceOf(address(this));
 
         uint256[] memory requestIds = new uint256[](1);
@@ -149,6 +153,10 @@ contract TestLidoProtocolFork is Test {
         LidoV2Protocol protocol = new LidoV2Protocol(mainnet.STETH, address(mockUnstETH), mainnet.WETH);
         protocol.initialize(address(this));
 
+        deal(address(weth), address(this), totalEth);
+        weth.approve(address(protocol), totalEth);
+        protocol.stake(address(weth), totalEth);
+
         uint256 wethBefore = weth.balanceOf(address(this));
 
         uint256[] memory requestIds = new uint256[](numRequests);
@@ -164,6 +172,31 @@ contract TestLidoProtocolFork is Test {
             wethBefore + totalEth,
             "all WETH returned to vault after claim"
         );
+    }
+
+    function test_Claim_ChargesTenPercentOnEarnings() public {
+        uint256 principal = 1 ether;
+        uint256 claimAmount = 1.1 ether;
+        MockUnstETHSendsEth mockUnstETH = new MockUnstETHSendsEth{value: claimAmount}(claimAmount);
+        LidoV2Protocol protocol = new LidoV2Protocol(mainnet.STETH, address(mockUnstETH), mainnet.WETH);
+        protocol.initialize(address(this));
+
+        deal(address(weth), address(this), principal);
+        weth.approve(address(protocol), principal);
+        protocol.stake(address(weth), principal);
+
+        uint256 wethBefore = weth.balanceOf(address(this));
+        uint256 feeBefore = weth.balanceOf(0x12EE2de7BF086388B1D560eb95e7191Edfab9823);
+
+        uint256[] memory requestIds = new uint256[](1);
+        requestIds[0] = 1;
+        protocol.claimUnstaked(requestIds);
+
+        uint256 earning = claimAmount - principal;
+        uint256 expectedFee = earning * 1000 / 10_000;
+
+        assertEq(weth.balanceOf(0x12EE2de7BF086388B1D560eb95e7191Edfab9823), feeBefore + expectedFee);
+        assertEq(weth.balanceOf(address(this)), wethBefore + claimAmount - expectedFee);
     }
 
     function test_Claim_emptyUnstakeRequests_doesNotRevert() public {

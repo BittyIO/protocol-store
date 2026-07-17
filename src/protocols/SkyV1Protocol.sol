@@ -7,12 +7,13 @@ import {
     ClaimUnstakedNotSupported
 } from "../interfaces/IBittyV1StakingProtocol.sol";
 import {IDssPsm, ISUsds} from "../libs/sky/Sky.sol";
+import {YieldFeeTracker} from "../libs/YieldFeeTracker.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
-contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
+contract SkyV1Protocol is IBittyV1StakingProtocol, YieldFeeTracker, Ownable, Initializable {
     using SafeERC20 for IERC20;
 
     // USDC is 6 decimals, USDS is 18 decimals → multiply by 1e12 to convert
@@ -25,6 +26,14 @@ contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
     IDssPsm public immutable psm;
 
     mapping(address => address) public receiptTokenOf;
+
+    function name() external pure override returns (string memory) {
+        return "Sky V1";
+    }
+
+    function version() external pure override returns (string memory) {
+        return "1.0.0";
+    }
 
     constructor(address usdc_, address usds_, address sUsds_, address psm_) Ownable(msg.sender) {
         usdc = IERC20(usdc_);
@@ -57,6 +66,7 @@ contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
             usds.forceApprove(address(sUsds), type(uint256).max);
         }
         sUsds.deposit(usdsReceived, address(this));
+        _recordDeposit(asset, amount);
 
         if (receiptTokenOf[asset] == address(0)) {
             receiptTokenOf[asset] = address(sUsds);
@@ -83,8 +93,10 @@ contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
 
     /**
      * @notice Unstake the staked asset and deliver the redeemed USDC to `recipient`.
-     * @dev Redeems sUSDS → USDS, converts USDS → USDC via PSM. Sky settles synchronously, so the USDC
-     * is delivered to `recipient` in the same transaction. Pass the vault as `recipient` for a normal
+     * @dev Redeems sUSDS → USDS, converts USDS → USDC via PSM. The sUSDS shares are always pulled
+     * from `owner()` (the vault, via msg.sender); only the resulting USDC is routed to `recipient`.
+     * Any USDS dust from rounding is returned to the vault. Sky settles synchronously, so the USDC is
+     * delivered to `recipient` in the same transaction. Pass the vault as `recipient` for a normal
      * unstake, or a receiver to pay it straight out of the staked position.
      * @param asset Must be the USDC address.
      * @param amount Amount of USDC (6 decimals) to unstake.
@@ -97,19 +109,11 @@ contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         onlyOwner
         returns (uint256 delivered)
     {
-        return _unstake(asset, amount, recipient);
-    }
-
-    /**
-     * @dev Shared unstake path. The sUSDS shares are always pulled from `owner()`
-     * (the vault, via msg.sender), only the resulting USDC is routed to `recipient`.
-     * Any USDS dust from rounding is returned to the vault.
-     * @return delivered The amount of USDC sent to `recipient`.
-     */
-    function _unstake(address asset, uint256 amount, address recipient) private returns (uint256 delivered) {
         if (asset != address(usdc)) revert InvalidAsset();
 
         uint256 tout = psm.tout();
+        uint256 usdcBefore;
+        uint256 gross;
 
         if (amount == type(uint256).max) {
             uint256 shares = sUsds.balanceOf(msg.sender);
@@ -122,11 +126,13 @@ contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
             if (usds.allowance(address(this), address(psm)) < usdsAvailable) {
                 usds.forceApprove(address(psm), type(uint256).max);
             }
-            psm.buyGem(recipient, amount);
+            usdcBefore = usdc.balanceOf(address(this));
+            psm.buyGem(address(this), amount);
+            gross = usdc.balanceOf(address(this)) - usdcBefore;
 
             uint256 dust = usds.balanceOf(address(this));
             if (dust > 0) usds.safeTransfer(msg.sender, dust);
-            return amount;
+            return _deliverWithEarningFee(asset, usdc, gross, recipient);
         }
 
         uint256 usdsNeeded = amount * GEM_CONVERSION_FACTOR;
@@ -142,8 +148,10 @@ contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         if (usds.allowance(address(this), address(psm)) < usdsNeeded) {
             usds.forceApprove(address(psm), type(uint256).max);
         }
-        psm.buyGem(recipient, amount);
-        return amount;
+        usdcBefore = usdc.balanceOf(address(this));
+        psm.buyGem(address(this), amount);
+        gross = usdc.balanceOf(address(this)) - usdcBefore;
+        return _deliverWithEarningFee(asset, usdc, gross, recipient);
     }
 
     /**

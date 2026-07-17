@@ -3,17 +3,26 @@ pragma solidity ^0.8.34;
 
 import {IBittyV1LendingProtocol} from "../interfaces/IBittyV1LendingProtocol.sol";
 import {IAaveV3, IAavePool, IPoolDataProvider} from "../libs/aave/v3/Aave.sol";
+import {YieldFeeTracker} from "../libs/YieldFeeTracker.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
-contract AaveV3Protocol is IBittyV1LendingProtocol, Ownable, Initializable {
+contract AaveV3Protocol is IBittyV1LendingProtocol, YieldFeeTracker, Ownable, Initializable {
     using SafeERC20 for IERC20;
     address public immutable aaveV3;
     address public immutable poolDataProvider;
 
     mapping(address => address) public receiptTokenOf;
+
+    function name() external pure override returns (string memory) {
+        return "Aave V3";
+    }
+
+    function version() external pure override returns (string memory) {
+        return "1.0.0";
+    }
 
     constructor(address aaveV3_, address poolDataProvider_) Ownable(msg.sender) {
         aaveV3 = aaveV3_;
@@ -39,6 +48,7 @@ contract AaveV3Protocol is IBittyV1LendingProtocol, Ownable, Initializable {
             IERC20(asset).forceApprove(address(pool), type(uint256).max);
         }
         pool.supply(asset, amount, address(this), 0);
+        _recordDeposit(asset, amount);
 
         address aToken = _getAToken(asset);
         if (receiptTokenOf[asset] == address(0)) {
@@ -53,8 +63,9 @@ contract AaveV3Protocol is IBittyV1LendingProtocol, Ownable, Initializable {
     /**
      * @notice Withdraw supplied asset and deliver it to `recipient`.
      * @dev Aave settles synchronously, so the withdrawn asset is delivered to `recipient` in the same
-     * transaction. Pass the vault as `recipient` for a normal withdrawal, or a receiver to pay it
-     * straight out of the supplied position.
+     * transaction. The aToken is always pulled from `owner()` (the vault, via msg.sender); only the
+     * underlying asset is routed to `recipient`. Pass the vault as `recipient` for a normal withdrawal,
+     * or a receiver to pay it straight out of the supplied position.
      * @param asset The address of the asset.
      * @param amount The amount to withdraw.
      * @param recipient The address that receives the withdrawn asset.
@@ -66,22 +77,14 @@ contract AaveV3Protocol is IBittyV1LendingProtocol, Ownable, Initializable {
         onlyOwner
         returns (uint256 delivered)
     {
-        return _withdraw(asset, amount, recipient);
-    }
-
-    /**
-     * @dev Shared withdraw path. The aToken is always pulled from `owner()` (the vault,
-     * via msg.sender); only the underlying asset is routed to `recipient`.
-     * @return delivered The amount of `asset` delivered to `recipient`.
-     */
-    function _withdraw(address asset, uint256 amount, address recipient) private returns (uint256 delivered) {
         address aToken = receiptTokenOf[asset];
         if (aToken == address(0)) {
             aToken = _getAToken(asset);
         }
         uint256 transferAmount = amount == type(uint256).max ? IERC20(aToken).balanceOf(msg.sender) : amount;
         IERC20(aToken).safeTransferFrom(msg.sender, address(this), transferAmount);
-        return IAaveV3(aaveV3).getPool().withdraw(asset, amount, recipient);
+        uint256 gross = IAaveV3(aaveV3).getPool().withdraw(asset, amount, address(this));
+        return _deliverWithEarningFee(asset, IERC20(asset), gross, recipient);
     }
 
     function getSuppliedBalance(address asset) external view override returns (uint256) {

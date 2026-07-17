@@ -177,4 +177,29 @@ contract TestSkyV1ProtocolFork is Test {
         uint256 balanceAfterYield = skyProtocol.getStakedBalance(mainnet.USDC);
         assertGe(balanceAfterYield, STAKE_AMOUNT);
     }
+
+    function test_Unstake_ChargesTenPercentOnEarnings() public {
+        deal(mainnet.USDC, address(this), STAKE_AMOUNT);
+        usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
+        skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
+
+        vm.warp(block.timestamp + 365 days);
+
+        uint256 gross = skyProtocol.getStakedBalance(mainnet.USDC);
+        assertGt(gross, STAKE_AMOUNT);
+
+        IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
+
+        address feeRecipient = 0x12EE2de7BF086388B1D560eb95e7191Edfab9823;
+        uint256 feeBefore = usdc.balanceOf(feeRecipient);
+        uint256 usdcBefore = usdc.balanceOf(address(this));
+
+        skyProtocol.unstake(mainnet.USDC, type(uint256).max, address(this));
+
+        uint256 earning = gross - STAKE_AMOUNT;
+        uint256 expectedFee = earning * 1000 / 10_000;
+
+        assertApproxEqAbs(usdc.balanceOf(feeRecipient) - feeBefore, expectedFee, 1);
+        assertApproxEqAbs(usdc.balanceOf(address(this)) - usdcBefore, gross - expectedFee, STAKE_AMOUNT / 100);
+    }
 }

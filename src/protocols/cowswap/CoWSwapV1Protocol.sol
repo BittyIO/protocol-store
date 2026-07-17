@@ -72,25 +72,16 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
     string private constant TWAP_APP_DATA_SUFFIX =
         '","metadata":{"partnerFee":{"bps":20,"recipient":"0x12EE2de7BF086388B1D560eb95e7191Edfab9823"}},"version":"1.3.0"}';
 
-    /**
-     * @notice The exact fee-bearing appData JSON string a TWAP with `salt` commits to.
-     *         The off-chain layer must PUT this byte-for-byte to the CoW API so solvers
-     *         can resolve the hash and apply the partner fee.
-     */
-    function twapFullAppData(uint256 salt) public pure returns (string memory) {
-        return string.concat(TWAP_APP_DATA_PREFIX, salt.toString(), TWAP_APP_DATA_SUFFIX);
-    }
-
-    /**
-     * @notice keccak256 of twapFullAppData(salt) — the appData hash baked into every part
-     *         order of the TWAP. Exposed so the frontend can cross-check its own hash.
-     */
-    function twapAppData(uint256 salt) public pure returns (bytes32) {
-        return keccak256(bytes(twapFullAppData(salt)));
-    }
-
     IGPv2Settlement public immutable settlement;
     address public immutable vaultRelayer;
+
+    function name() external pure override returns (string memory) {
+        return "CoWSwap V1";
+    }
+
+    function version() external pure override returns (string memory) {
+        return "1.0.0";
+    }
 
     constructor(address settlement_, address vaultRelayer_) Ownable(msg.sender) {
         settlement = IGPv2Settlement(settlement_);
@@ -181,6 +172,23 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
 
     function deregisterOrder(bytes32 orderHash) external onlyOwner {
         delete activeOrders[orderHash];
+    }
+
+    /**
+     * @notice The exact fee-bearing appData JSON string a TWAP with `salt` commits to.
+     *         The off-chain layer must PUT this byte-for-byte to the CoW API so solvers
+     *         can resolve the hash and apply the partner fee.
+     */
+    function twapFullAppData(uint256 salt) public pure returns (string memory) {
+        return string.concat(TWAP_APP_DATA_PREFIX, salt.toString(), TWAP_APP_DATA_SUFFIX);
+    }
+
+    /**
+     * @notice keccak256 of twapFullAppData(salt) — the appData hash baked into every part
+     *         order of the TWAP. Exposed so the frontend can cross-check its own hash.
+     */
+    function twapAppData(uint256 salt) public pure returns (bytes32) {
+        return keccak256(bytes(twapFullAppData(salt)));
     }
 
     /**

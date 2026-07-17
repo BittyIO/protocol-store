@@ -22,6 +22,14 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
     address public immutable positionManager;
     address public immutable bittyGuard;
 
+    function name() external pure override returns (string memory) {
+        return "Uniswap V3";
+    }
+
+    function version() external pure override returns (string memory) {
+        return "1.0.0";
+    }
+
     constructor(address router_, address positionManager_, address bittyGuard_) Ownable(msg.sender) {
         router = router_;
         positionManager = positionManager_;

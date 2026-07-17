@@ -12,12 +12,13 @@ import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 import {IStETH, IUnstETH} from "../libs/lido/v2/Lido.sol";
+import {YieldFeeTracker} from "../libs/YieldFeeTracker.sol";
 import {WETH} from "solmate/tokens/WETH.sol";
 import {EnumerableSet} from "openzeppelin-contracts/contracts/utils/structs/EnumerableSet.sol";
 
 error WETHBalanceNotEnough();
 
-contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
+contract LidoV2Protocol is IBittyV1StakingProtocol, YieldFeeTracker, Ownable, Initializable {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.UintSet;
     EnumerableSet.UintSet private _unstakeRequests;
@@ -26,6 +27,14 @@ contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
     WETH public immutable weth;
 
     mapping(address => address) public receiptTokenOf;
+
+    function name() external pure override returns (string memory) {
+        return "Lido V2";
+    }
+
+    function version() external pure override returns (string memory) {
+        return "1.0.0";
+    }
 
     constructor(address stETH_, address unstETH_, address weth_) Ownable(msg.sender) {
         stETH = IStETH(stETH_);
@@ -51,6 +60,7 @@ contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         uint256 stETHBefore = stETH.balanceOf(address(this));
         stETH.submit{value: amount}(address(this));
         uint256 stETHReceived = stETH.balanceOf(address(this)) - stETHBefore;
+        _recordDeposit(asset, amount);
 
         if (receiptTokenOf[asset] == address(0)) {
             receiptTokenOf[asset] = address(stETH);
@@ -124,7 +134,7 @@ contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         uint256 ethClaimed = address(this).balance - ethBefore;
         if (ethClaimed > 0) {
             weth.deposit{value: ethClaimed}();
-            IERC20(address(weth)).safeTransfer(msg.sender, ethClaimed);
+            _deliverWithEarningFee(address(weth), IERC20(address(weth)), ethClaimed, msg.sender);
         }
     }
 }

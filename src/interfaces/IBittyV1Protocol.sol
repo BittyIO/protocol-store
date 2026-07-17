@@ -13,4 +13,16 @@ interface IBittyV1Protocol {
      * @dev Initialize the protocol.
      */
     function initialize(address newOwner) external;
+
+    /**
+     * @notice The name of the protocol.
+     * @return The name of the protocol.
+     */
+    function name() external view returns (string memory);
+
+    /**
+     * @notice The version of the protocol.
+     * @return The version of the protocol.
+     */
+    function version() external view returns (string memory);
 }
