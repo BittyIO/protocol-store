@@ -178,7 +178,7 @@ contract TestSkyV1ProtocolFork is Test {
         assertGe(balanceAfterYield, STAKE_AMOUNT);
     }
 
-    function test_Unstake_ChargesTenPercentOnEarnings() public {
+    function test_Unstake_DeliversFullAmountNoYieldFee() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
         usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
         skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
@@ -196,10 +196,8 @@ contract TestSkyV1ProtocolFork is Test {
 
         skyProtocol.unstake(mainnet.USDC, type(uint256).max, address(this));
 
-        uint256 earning = gross - STAKE_AMOUNT;
-        uint256 expectedFee = earning * 1000 / 10_000;
-
-        assertApproxEqAbs(usdc.balanceOf(feeRecipient) - feeBefore, expectedFee, 1);
-        assertApproxEqAbs(usdc.balanceOf(address(this)) - usdcBefore, gross - expectedFee, STAKE_AMOUNT / 100);
+        // Yield fee removed: nothing goes to the old fee recipient; the caller receives the full redeemed amount.
+        assertEq(usdc.balanceOf(feeRecipient), feeBefore, "no yield fee taken");
+        assertApproxEqAbs(usdc.balanceOf(address(this)) - usdcBefore, gross, STAKE_AMOUNT / 100);
     }
 }

@@ -3,13 +3,12 @@ pragma solidity ^0.8.34;
 
 import {IBittyV1LendingProtocol} from "../interfaces/IBittyV1LendingProtocol.sol";
 import {IAaveV3, IAavePool, IPoolDataProvider} from "../libs/aave/v3/Aave.sol";
-import {YieldFeeTracker} from "../libs/YieldFeeTracker.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
-contract AaveV3Protocol is IBittyV1LendingProtocol, YieldFeeTracker, Ownable, Initializable {
+contract AaveV3Protocol is IBittyV1LendingProtocol, Ownable, Initializable {
     using SafeERC20 for IERC20;
     address public immutable aaveV3;
     address public immutable poolDataProvider;
@@ -48,7 +47,6 @@ contract AaveV3Protocol is IBittyV1LendingProtocol, YieldFeeTracker, Ownable, In
             IERC20(asset).forceApprove(address(pool), type(uint256).max);
         }
         pool.supply(asset, amount, address(this), 0);
-        _recordDeposit(asset, amount);
 
         address aToken = _getAToken(asset);
         if (receiptTokenOf[asset] == address(0)) {
@@ -83,8 +81,8 @@ contract AaveV3Protocol is IBittyV1LendingProtocol, YieldFeeTracker, Ownable, In
         }
         uint256 transferAmount = amount == type(uint256).max ? IERC20(aToken).balanceOf(msg.sender) : amount;
         IERC20(aToken).safeTransferFrom(msg.sender, address(this), transferAmount);
-        uint256 gross = IAaveV3(aaveV3).getPool().withdraw(asset, amount, address(this));
-        return _deliverWithEarningFee(asset, IERC20(asset), gross, recipient);
+        delivered = IAaveV3(aaveV3).getPool().withdraw(asset, amount, address(this));
+        IERC20(asset).safeTransfer(recipient, delivered);
     }
 
     function getSuppliedBalance(address asset) external view override returns (uint256) {

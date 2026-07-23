@@ -174,7 +174,7 @@ contract TestLidoProtocolFork is Test {
         );
     }
 
-    function test_Claim_ChargesTenPercentOnEarnings() public {
+    function test_Claim_DeliversFullAmountNoYieldFee() public {
         uint256 principal = 1 ether;
         uint256 claimAmount = 1.1 ether;
         MockUnstETHSendsEth mockUnstETH = new MockUnstETHSendsEth{value: claimAmount}(claimAmount);
@@ -186,17 +186,15 @@ contract TestLidoProtocolFork is Test {
         protocol.stake(address(weth), principal);
 
         uint256 wethBefore = weth.balanceOf(address(this));
-        uint256 feeBefore = weth.balanceOf(0x12EE2de7BF086388B1D560eb95e7191Edfab9823);
+        uint256 feeRecipientBefore = weth.balanceOf(0x12EE2de7BF086388B1D560eb95e7191Edfab9823);
 
         uint256[] memory requestIds = new uint256[](1);
         requestIds[0] = 1;
         protocol.claimUnstaked(requestIds);
 
-        uint256 earning = claimAmount - principal;
-        uint256 expectedFee = earning * 1000 / 10_000;
-
-        assertEq(weth.balanceOf(0x12EE2de7BF086388B1D560eb95e7191Edfab9823), feeBefore + expectedFee);
-        assertEq(weth.balanceOf(address(this)), wethBefore + claimAmount - expectedFee);
+        // Yield fee removed: the entire claimed amount goes to the caller, nothing to the old fee recipient.
+        assertEq(weth.balanceOf(0x12EE2de7BF086388B1D560eb95e7191Edfab9823), feeRecipientBefore, "no yield fee taken");
+        assertEq(weth.balanceOf(address(this)), wethBefore + claimAmount, "caller receives full claim");
     }
 
     function test_Claim_emptyUnstakeRequests_doesNotRevert() public {
