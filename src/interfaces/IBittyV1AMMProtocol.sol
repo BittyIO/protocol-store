@@ -9,22 +9,6 @@ import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
  */
 interface IBittyV1AMMProtocol is IBittyV1Protocol {
     /**
-     * @notice Exact-input swap: sell exactly `sellAmount`, receive ≥ `buyAmountMin`, delivered to
-     * `recipient`. Pass the vault itself as `recipient` for a normal swap, or a receiver to swap and
-     * pay it in one step. Only the asset manager can execute it.
-     * @dev data = abi.encode(sellToken, sellAmount, buyToken, buyAmountMin, path)
-     */
-    function swap(bytes memory data, address recipient) external payable;
-
-    /**
-     * @notice Exact-output swap: receive exactly `buyAmount`, spend ≤ `sellAmountMax`, delivered to
-     * `recipient`. Only the asset manager can execute it.
-     * @dev data = abi.encode(sellToken, sellAmountMax, buyToken, buyAmount, reversedPath). The path
-     * must be in reverse order (buyToken → ... → sellToken) per Uniswap V3 exactOutput.
-     */
-    function swapExactOut(bytes memory data, address recipient) external;
-
-    /**
      * @notice Add liquidity to the AMM protocol.
      * @dev Add liquidity to the AMM protocol.
      * @param data The data for the add liquidity.

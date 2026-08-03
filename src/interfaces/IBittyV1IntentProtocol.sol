@@ -84,6 +84,15 @@ interface IBittyV1IntentProtocol is IBittyV1Protocol {
     /// @notice Build cancel/deregistration instructions for a limit order or TWAP.
     function buildCancelInstructions(bytes32 orderId) external view returns (CancelInstructions memory instructions);
 
+    /**
+     * @notice Whether `orderId` has been (or may have been) filled on the underlying settlement — i.e.
+     *         some of its sell tokens have left the vault. The vault reads this BEFORE cancelling an order
+     *         (settlements may overwrite fill state on invalidation) to decide whether a cancelled/expired
+     *         order's reserved trade-cap budget can be reclaimed. Fill-or-kill orders are all-or-nothing so
+     *         this is exact for them; multi-part orders (TWAP) conservatively return true.
+     */
+    function orderFilled(bytes32 orderId) external view returns (bool);
+
     /// @notice EIP-1271 — validate signatures for orders registered under the vault by this protocol.
     ///         Called by vault.isValidSignature(); owner() must return the vault address.
     function isValidSignature(bytes32 hash, bytes memory signature) external view returns (bytes4);

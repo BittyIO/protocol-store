@@ -303,6 +303,16 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
         }
     }
 
+    /// @inheritdoc IBittyV1IntentProtocol
+    /// @dev Read BEFORE cancelling: invalidateOrder overwrites filledAmount with a sentinel. Limit orders
+    ///      are fill-or-kill so filledAmount is 0 (unfilled) or the full amount (filled). TWAPs are
+    ///      multi-part; a single read can't prove every part unfilled, so return true (not refundable).
+    function orderFilled(bytes32 orderId) external view override returns (bool) {
+        if (twapOrders[orderId].n != 0) return true;
+        bytes memory uid = abi.encodePacked(orderId, owner(), uint32(activeOrders[orderId]));
+        return settlement.filledAmount(uid) != 0;
+    }
+
     // ============ EIP-1271 ============
 
     /**

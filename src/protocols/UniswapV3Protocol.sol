@@ -2,12 +2,10 @@
 pragma solidity ^0.8.34;
 
 import {IBittyV1AMMProtocol} from "../interfaces/IBittyV1AMMProtocol.sol";
-import {IBittyV1Guard} from "../interfaces/IBittyV1Guard.sol";
-import {IUniswapV3Router, INonfungiblePositionManager} from "../libs/uniswap/v3/Uniswap.sol";
+import {INonfungiblePositionManager} from "../libs/uniswap/v3/Uniswap.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IERC721} from "openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-import {Address} from "openzeppelin-contracts/contracts/utils/Address.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
@@ -15,12 +13,9 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
     using SafeERC20 for IERC20;
 
     address public constant FEE_RECIPIENT = 0x12EE2de7BF086388B1D560eb95e7191Edfab9823;
-    uint256 private constant SWAP_FEE_BPS = 20; // 0.2%
     uint256 private constant COLLECT_FEE_BPS = 100; // 1%
 
-    address public immutable router;
     address public immutable positionManager;
-    address public immutable bittyGuard;
 
     function name() external pure override returns (string memory) {
         return "Uniswap V3";
@@ -30,10 +25,8 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
         return "1.0.0";
     }
 
-    constructor(address router_, address positionManager_, address bittyGuard_) Ownable(msg.sender) {
-        router = router_;
+    constructor(address positionManager_) Ownable(msg.sender) {
         positionManager = positionManager_;
-        bittyGuard = bittyGuard_;
     }
 
     function initialize(address newOwner) external override initializer {
@@ -41,107 +34,6 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
     }
 
     receive() external payable {}
-
-    /**
-     * @notice Exact-input swap whose bought token is delivered to `recipient`.
-     * @dev Pass the vault as `recipient` for a normal swap, or a receiver to swap and pay it in one
-     * step. The 0.2% fee still goes to FEE_RECIPIENT and any unspent native ETH is refunded to the
-     * caller (the vault).
-     * @param data abi.encode(sellToken, sellAmount, buyToken, buyAmountMin, path)
-     * @param recipient The address that receives the bought token.
-     */
-    function swap(bytes memory data, address recipient) external payable override onlyOwner {
-        _swap(data, recipient);
-    }
-
-    function _swap(bytes memory data, address recipient) private {
-        (address tokenIn, uint256 amountIn, address tokenOut, uint256 amountOutMinimum, bytes memory path) =
-            abi.decode(data, (address, uint256, address, uint256, bytes));
-
-        uint256 swapAmountIn = amountIn;
-        bool feeFromOutput;
-
-        if (_isStablecoin(tokenIn)) {
-            uint256 fee = amountIn * SWAP_FEE_BPS / 10_000;
-            if (fee > 0) {
-                if (tokenIn != address(0)) {
-                    IERC20(tokenIn).safeTransferFrom(msg.sender, FEE_RECIPIENT, fee);
-                } else {
-                    Address.sendValue(payable(FEE_RECIPIENT), fee);
-                }
-                swapAmountIn = amountIn - fee;
-            }
-        } else {
-            feeFromOutput = true;
-        }
-
-        IUniswapV3Router.ExactInputParams memory params = IUniswapV3Router.ExactInputParams({
-            path: path, recipient: address(this), amountIn: swapAmountIn, amountOutMinimum: amountOutMinimum
-        });
-
-        if (tokenIn != address(0)) {
-            IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), swapAmountIn);
-            if (IERC20(tokenIn).allowance(address(this), router) < swapAmountIn) {
-                IERC20(tokenIn).forceApprove(router, type(uint256).max);
-            }
-        }
-
-        uint256 amountOut =
-            IUniswapV3Router(router).exactInput{value: tokenIn == address(0) ? swapAmountIn : msg.value}(params);
-
-        if (address(this).balance != 0) {
-            Address.sendValue(payable(msg.sender), address(this).balance);
-        }
-
-        if (tokenOut != address(0)) {
-            if (feeFromOutput) {
-                uint256 fee = amountOut * SWAP_FEE_BPS / 10_000;
-                if (fee > 0) {
-                    IERC20(tokenOut).safeTransfer(FEE_RECIPIENT, fee);
-                }
-                IERC20(tokenOut).safeTransfer(recipient, amountOut - fee);
-            } else {
-                IERC20(tokenOut).safeTransfer(recipient, amountOut);
-            }
-        }
-    }
-
-    /**
-     * @notice Exact-output swap whose bought token is delivered to `recipient`.
-     * @dev Pass the vault as `recipient` for a normal swap, or a receiver to swap and pay it in one
-     * step. The 0.2% fee still goes to FEE_RECIPIENT and any unspent input is refunded to the caller.
-     * @param data abi.encode(sellToken, sellAmountMax, buyToken, buyAmount, reversedPath)
-     * @param recipient The address that receives the bought token.
-     */
-    function swapExactOut(bytes memory data, address recipient) external override onlyOwner {
-        _swapExactOut(data, recipient);
-    }
-
-    function _swapExactOut(bytes memory data, address recipient) private {
-        (address tokenIn, uint256 amountInMaximum, address tokenOut, uint256 amountOut, bytes memory path) =
-            abi.decode(data, (address, uint256, address, uint256, bytes));
-
-        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountInMaximum);
-
-        uint256 swapAmountInMaximum = amountInMaximum * 10_000 / (10_000 + SWAP_FEE_BPS);
-        if (IERC20(tokenIn).allowance(address(this), router) < swapAmountInMaximum) {
-            IERC20(tokenIn).forceApprove(router, type(uint256).max);
-        }
-
-        IUniswapV3Router.ExactOutputParams memory params = IUniswapV3Router.ExactOutputParams({
-            path: path, recipient: address(this), amountOut: amountOut, amountInMaximum: swapAmountInMaximum
-        });
-
-        uint256 amountIn = IUniswapV3Router(router).exactOutput(params);
-
-        uint256 fee = amountIn * SWAP_FEE_BPS / 10_000;
-        if (fee > 0) IERC20(tokenIn).safeTransfer(FEE_RECIPIENT, fee);
-
-        uint256 leftover = amountInMaximum - amountIn - fee;
-        if (leftover > 0) IERC20(tokenIn).safeTransfer(msg.sender, leftover);
-
-        IERC20(tokenOut).safeTransfer(recipient, amountOut);
-    }
 
     function addLiquidity(bytes memory data) external override onlyOwner {
         (bool isMint, bytes memory paramsEncoded) = abi.decode(data, (bool, bytes));
@@ -261,10 +153,6 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
         uint256 tokenId = abi.decode(data, (uint256));
         (,,,,,,, uint128 liquidity,,,,) = INonfungiblePositionManager(positionManager).positions(tokenId);
         return uint256(liquidity);
-    }
-
-    function _isStablecoin(address token) internal view returns (bool) {
-        return IBittyV1Guard(bittyGuard).isStableCoinRegistered(token);
     }
 
     /**
