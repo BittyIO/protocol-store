@@ -51,6 +51,25 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
     // EIP-712 type hash for CoW's batch order cancellation, signed off-chain to soft-cancel orders.
     bytes32 private constant CANCELLATIONS_TYPE_HASH = keccak256("OrderCancellations(bytes[] orderUids)");
 
+    // A whole TWAP schedule, signed ONCE by the manager. Each of `numParts` parts is a fill-or-kill
+    // SELL of `sellAmountPerPart` for at least `buyAmountPerPart`, valid only during its slot
+    // [startTime + i*partDuration, startTime + (i+1)*partDuration]. `startTime` doubles as the appData
+    // salt so a schedule's parts share one fee-bearing appData. The clone reconstructs part i from these
+    // params and matches it to the presented order, so N parts need only this single signature.
+    struct TwapOrder {
+        address sellToken;
+        address buyToken;
+        uint256 sellAmountPerPart;
+        uint256 buyAmountPerPart;
+        uint256 startTime;
+        uint256 partDuration;
+        uint256 numParts;
+    }
+
+    bytes32 private constant TWAP_TYPE_HASH = keccak256(
+        "TwapOrder(address sellToken,address buyToken,uint256 sellAmountPerPart,uint256 buyAmountPerPart,uint256 startTime,uint256 partDuration,uint256 numParts)"
+    );
+
     IGPv2Settlement public immutable settlement;
     address public immutable vaultRelayer;
 
@@ -91,6 +110,9 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
         try this.validateOffchainOrder(hash, signature) returns (bytes4 res) {
             if (res == MAGICVALUE) return res;
         } catch {}
+        try this.validateOffchainTwapPart(hash, signature) returns (bytes4 resTwap) {
+            if (resTwap == MAGICVALUE) return resTwap;
+        } catch {}
         try this.validateOffchainCancellation(hash, signature) returns (bytes4 res2) {
             return res2;
         } catch {}
@@ -110,8 +132,7 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
         for (uint256 i = 0; i < orderUids.length; i++) {
             hashedUids[i] = keccak256(orderUids[i]);
         }
-        bytes32 structHash =
-            keccak256(abi.encode(CANCELLATIONS_TYPE_HASH, keccak256(abi.encodePacked(hashedUids))));
+        bytes32 structHash = keccak256(abi.encode(CANCELLATIONS_TYPE_HASH, keccak256(abi.encodePacked(hashedUids))));
         bytes32 digest = keccak256(abi.encodePacked(hex"1901", settlement.domainSeparator(), structHash));
         if (digest != hash) return INVALID;
 
@@ -135,15 +156,32 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
         return keccak256(bytes(twapFullAppData(salt)));
     }
 
+    /// @notice The EIP-712 digest a manager signs once to authorize a whole TWAP schedule, under the
+    ///         settlement domain (its own type hash keeps it distinct from a GPv2 order).
+    function twapDigest(TwapOrder memory p) public view returns (bytes32) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                TWAP_TYPE_HASH,
+                p.sellToken,
+                p.buyToken,
+                p.sellAmountPerPart,
+                p.buyAmountPerPart,
+                p.startTime,
+                p.partDuration,
+                p.numParts
+            )
+        );
+        return keccak256(abi.encodePacked(hex"1901", settlement.domainSeparator(), structHash));
+    }
+
     /**
-     * @notice Validate a gasless, off-chain-signed CoW order. External so {isValidSignature} can reach it
-     *         via a self staticcall and treat any revert as "not signable". `signature` is
-     *         abi.encode(GPv2Order.Data order, bytes managerSignature, uint256 appDataSalt): appDataSalt 0
-     *         means a limit order (order.appData must be APP_DATA); a non-zero salt means a TWAP part
-     *         (order.appData must be twapAppData(salt) — still fee-bearing, just salted per schedule).
+     * @notice Validate a gasless, off-chain-signed CoW LIMIT order. External so {isValidSignature} can reach
+     *         it via a self staticcall and treat any revert as "not signable". `signature` is
+     *         abi.encode(GPv2Order.Data order, bytes managerSignature, uint256 appDataSalt); appDataSalt must
+     *         be 0 (a limit order carries APP_DATA — TWAP parts go through {validateOffchainTwapPart}).
      * @dev  1. the carried order must hash (under the settlement domain) to exactly `hash` — a tampered
      *          field changes the hash and fails;
-     *       2. it must settle to the vault (receiver == owner()), carry the expected fee-bearing appData, be
+     *       2. it must settle to the vault (receiver == owner()), carry the fee-bearing APP_DATA, be
      *          fill-or-kill ERC-20/ERC-20 with feeAmount 0, and not be expired;
      *       3. the recovered manager must be authorized by the vault for this exact trade (a pure view, so
      *          no reservation is written and nothing can leak).
@@ -152,10 +190,10 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
         (GPv2Order.Data memory order, bytes memory managerSig, uint256 appDataSalt) =
             abi.decode(signature, (GPv2Order.Data, bytes, uint256));
 
+        if (appDataSalt != 0) return INVALID;
         if (GPv2Order.hash(order, settlement.domainSeparator()) != hash) return INVALID;
         if (order.receiver != owner()) return INVALID;
-        bytes32 expectedAppData = appDataSalt == 0 ? APP_DATA : twapAppData(appDataSalt);
-        if (order.appData != expectedAppData) return INVALID;
+        if (order.appData != APP_DATA) return INVALID;
         if (order.feeAmount != 0) return INVALID;
         if (order.partiallyFillable) return INVALID;
         if (order.sellTokenBalance != GPv2Order.BALANCE_ERC20) return INVALID;
@@ -166,6 +204,47 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
         if (IBittyVaultOffchainAuth(owner())
                 .isOffchainOrderAuthorized(signer, address(order.sellToken), address(order.buyToken), order.sellAmount))
         {
+            return MAGICVALUE;
+        }
+        return INVALID;
+    }
+
+    /**
+     * @notice Validate a single part of a gasless TWAP the manager signed ONCE. External so
+     *         {isValidSignature} can reach it via a self staticcall. `signature` is
+     *         abi.encode(GPv2Order.Data order, TwapOrder params, uint256 partIndex, bytes managerSignature):
+     *         the manager's signature is over `params` (the whole schedule), and the clone reconstructs what
+     *         part `partIndex` must be from `params` and requires the presented order to match — so N parts
+     *         need only this one signature.
+     * @dev  1. the carried order must hash (settlement domain) to exactly `hash`;
+     *       2. every field must equal the deterministic part-`partIndex` order derived from `params`
+     *          (fill-or-kill ERC-20/ERC-20 SELL, feeAmount 0, receiver == vault, salted fee appData, and the
+     *          slot's validTo), and the part must be within the schedule and not expired;
+     *       3. the manager recovered from the single `params` signature must be authorized for the trade.
+     */
+    function validateOffchainTwapPart(bytes32 hash, bytes calldata signature) external view returns (bytes4) {
+        (GPv2Order.Data memory order, TwapOrder memory p, uint256 partIndex, bytes memory managerSig) =
+            abi.decode(signature, (GPv2Order.Data, TwapOrder, uint256, bytes));
+
+        if (GPv2Order.hash(order, settlement.domainSeparator()) != hash) return INVALID;
+        if (partIndex >= p.numParts) return INVALID;
+        if (address(order.sellToken) != p.sellToken) return INVALID;
+        if (address(order.buyToken) != p.buyToken) return INVALID;
+        if (order.receiver != owner()) return INVALID;
+        if (order.sellAmount != p.sellAmountPerPart) return INVALID;
+        if (order.buyAmount != p.buyAmountPerPart) return INVALID;
+        if (order.validTo != p.startTime + (partIndex + 1) * p.partDuration) return INVALID;
+        if (order.appData != twapAppData(p.startTime)) return INVALID;
+        if (order.feeAmount != 0) return INVALID;
+        if (order.kind != GPv2Order.KIND_SELL) return INVALID;
+        if (order.partiallyFillable) return INVALID;
+        if (order.sellTokenBalance != GPv2Order.BALANCE_ERC20) return INVALID;
+        if (order.buyTokenBalance != GPv2Order.BALANCE_ERC20) return INVALID;
+        if (order.validTo < block.timestamp) return INVALID;
+
+        address signer = ECDSA.recover(twapDigest(p), managerSig);
+        if (IBittyVaultOffchainAuth(owner())
+                .isOffchainOrderAuthorized(signer, p.sellToken, p.buyToken, order.sellAmount)) {
             return MAGICVALUE;
         }
         return INVALID;

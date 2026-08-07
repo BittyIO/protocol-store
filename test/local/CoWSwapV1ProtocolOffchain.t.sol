@@ -143,23 +143,89 @@ contract CoWSwapV1ProtocolOffchainTest is Test {
         assertEq(cow.isValidSignature(keccak256("x"), hex"deadbeef"), bytes4(0xffffffff));
     }
 
-    // ---- TWAP parts (salted appData) ----
+    // ---- TWAP: ONE manager signature over the whole schedule authorizes every part ----
 
-    function test_twapPart_saltedAppData_isSignable() public view {
-        GPv2Order.Data memory order = _order();
-        uint256 salt = 1712345678;
-        order.appData = cow.twapAppData(salt);
-        bytes32 hash = GPv2Order.hash(order, settlement.domainSeparator());
-        bytes memory sig = abi.encode(order, _sign(managerPk, hash), salt);
-        assertEq(cow.isValidSignature(hash, sig), bytes4(0x1626ba7e));
+    function _twap() internal view returns (CoWSwapV1Protocol.TwapOrder memory p) {
+        p = CoWSwapV1Protocol.TwapOrder({
+            sellToken: SELL,
+            buyToken: BUY,
+            sellAmountPerPart: 1e17,
+            buyAmountPerPart: 200e6,
+            startTime: block.timestamp,
+            partDuration: 600,
+            numParts: 5
+        });
     }
 
-    function test_twapPart_saltMismatch_rejected() public view {
-        GPv2Order.Data memory order = _order();
-        order.appData = cow.twapAppData(111);
+    // The order the clone must reconstruct for part `i` — every field is derived from the schedule.
+    function _twapPartOrder(CoWSwapV1Protocol.TwapOrder memory p, uint256 i)
+        internal
+        view
+        returns (GPv2Order.Data memory order)
+    {
+        order = GPv2Order.Data({
+            sellToken: IERC20(p.sellToken),
+            buyToken: IERC20(p.buyToken),
+            receiver: address(vault),
+            sellAmount: p.sellAmountPerPart,
+            buyAmount: p.buyAmountPerPart,
+            validTo: uint32(p.startTime + (i + 1) * p.partDuration),
+            appData: cow.twapAppData(p.startTime),
+            feeAmount: 0,
+            kind: GPv2Order.KIND_SELL,
+            partiallyFillable: false,
+            sellTokenBalance: GPv2Order.BALANCE_ERC20,
+            buyTokenBalance: GPv2Order.BALANCE_ERC20
+        });
+    }
+
+    function _twapPayload(CoWSwapV1Protocol.TwapOrder memory p, uint256 i, uint256 pk)
+        internal
+        view
+        returns (bytes32 hash, bytes memory sig)
+    {
+        GPv2Order.Data memory order = _twapPartOrder(p, i);
+        hash = GPv2Order.hash(order, settlement.domainSeparator());
+        sig = abi.encode(order, p, i, _sign(pk, cow.twapDigest(p)));
+    }
+
+    function test_twap_everyPartSignableFromOneSignature() public view {
+        CoWSwapV1Protocol.TwapOrder memory p = _twap();
+        for (uint256 i = 0; i < p.numParts; i++) {
+            (bytes32 hash, bytes memory sig) = _twapPayload(p, i, managerPk);
+            assertEq(cow.isValidSignature(hash, sig), bytes4(0x1626ba7e));
+        }
+    }
+
+    function test_twap_wrongSigner_rejected() public {
+        CoWSwapV1Protocol.TwapOrder memory p = _twap();
+        (bytes32 hash, bytes memory sig) = _twapPayload(p, 1, 0xB0B);
+        assertEq(cow.isValidSignature(hash, sig), bytes4(0xffffffff));
+    }
+
+    function test_twap_indexOutOfRange_rejected() public view {
+        CoWSwapV1Protocol.TwapOrder memory p = _twap();
+        (bytes32 hash, bytes memory sig) = _twapPayload(p, p.numParts, managerPk);
+        assertEq(cow.isValidSignature(hash, sig), bytes4(0xffffffff));
+    }
+
+    function test_twap_tamperedValidTo_rejected() public view {
+        CoWSwapV1Protocol.TwapOrder memory p = _twap();
+        GPv2Order.Data memory order = _twapPartOrder(p, 1);
+        order.validTo = uint32(p.startTime + 999); // not the slot boundary
         bytes32 hash = GPv2Order.hash(order, settlement.domainSeparator());
-        // payload declares a different salt than the appData was built with
-        bytes memory sig = abi.encode(order, _sign(managerPk, hash), uint256(222));
+        bytes memory sig = abi.encode(order, p, uint256(1), _sign(managerPk, cow.twapDigest(p)));
+        assertEq(cow.isValidSignature(hash, sig), bytes4(0xffffffff));
+    }
+
+    // Changing the signed schedule after signing breaks the single-signature binding.
+    function test_twap_tamperedScheduleAfterSigning_rejected() public view {
+        CoWSwapV1Protocol.TwapOrder memory p = _twap();
+        GPv2Order.Data memory order = _twapPartOrder(p, 1);
+        bytes32 hash = GPv2Order.hash(order, settlement.domainSeparator());
+        bytes memory managerSig = _sign(managerPk, cow.twapDigest(p));
+        p.numParts = 50; // digest of the presented params no longer matches the signature
+        bytes memory sig = abi.encode(order, p, uint256(1), managerSig);
         assertEq(cow.isValidSignature(hash, sig), bytes4(0xffffffff));
     }
 
