@@ -26,6 +26,10 @@ contract MockVaultAuth is IBittyVaultOffchainAuth {
     {
         return signer == manager && buyToken == allowedBuyToken;
     }
+
+    function isOffchainManager(address signer) external view returns (bool) {
+        return signer == manager;
+    }
 }
 
 // Exercises the gasless off-chain signing path against mainnet's REAL GPv2Settlement — proving the
@@ -69,7 +73,7 @@ contract TestCoWSwapV1ProtocolOffchainFork is Test {
     function _payload(GPv2Order.Data memory order, uint256 pk) internal view returns (bytes32 hash, bytes memory sig) {
         hash = GPv2Order.hash(order, IGPv2Settlement(mainnet.COW_SETTLEMENT).domainSeparator());
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, hash);
-        sig = abi.encode(order, abi.encodePacked(r, s, v));
+        sig = abi.encode(order, abi.encodePacked(r, s, v), uint256(0));
     }
 
     function test_offchainOrder_signableAgainstRealSettlement() public view {
@@ -87,7 +91,7 @@ contract TestCoWSwapV1ProtocolOffchainFork is Test {
         (bytes32 hash,) = _payload(order, managerPk);
         order.buyAmount = 1; // accept far less, but reuse the signed hash
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(managerPk, hash);
-        bytes memory tampered = abi.encode(order, abi.encodePacked(r, s, v));
+        bytes memory tampered = abi.encode(order, abi.encodePacked(r, s, v), uint256(0));
         assertEq(protocol.isValidSignature(hash, tampered), bytes4(0xffffffff));
     }
 

@@ -33,6 +33,10 @@ contract MockVaultAuth is IBittyVaultOffchainAuth {
     {
         return signer == manager && buyToken == allowedBuyToken;
     }
+
+    function isOffchainManager(address signer) external view returns (bool) {
+        return signer == manager;
+    }
 }
 
 contract CoWSwapV1ProtocolOffchainTest is Test {
@@ -80,7 +84,7 @@ contract CoWSwapV1ProtocolOffchainTest is Test {
 
     function _payload(GPv2Order.Data memory order, uint256 pk) internal view returns (bytes32 hash, bytes memory sig) {
         hash = GPv2Order.hash(order, settlement.domainSeparator());
-        sig = abi.encode(order, _sign(pk, hash));
+        sig = abi.encode(order, _sign(pk, hash), uint256(0));
     }
 
     function test_validOffchainOrder_isSignable() public view {
@@ -98,7 +102,7 @@ contract CoWSwapV1ProtocolOffchainTest is Test {
         (bytes32 hash, bytes memory sig) = _payload(order, managerPk);
         // Re-encode the payload with a mutated order but the original (signed) hash.
         order.buyAmount = 1; // steal: accept far less
-        bytes memory tampered = abi.encode(order, _sign(managerPk, hash));
+        bytes memory tampered = abi.encode(order, _sign(managerPk, hash), uint256(0));
         assertEq(cow.isValidSignature(hash, tampered), bytes4(0xffffffff));
     }
 
@@ -137,5 +141,68 @@ contract CoWSwapV1ProtocolOffchainTest is Test {
 
     function test_garbageSignature_doesNotRevert() public view {
         assertEq(cow.isValidSignature(keccak256("x"), hex"deadbeef"), bytes4(0xffffffff));
+    }
+
+    // ---- TWAP parts (salted appData) ----
+
+    function test_twapPart_saltedAppData_isSignable() public view {
+        GPv2Order.Data memory order = _order();
+        uint256 salt = 1712345678;
+        order.appData = cow.twapAppData(salt);
+        bytes32 hash = GPv2Order.hash(order, settlement.domainSeparator());
+        bytes memory sig = abi.encode(order, _sign(managerPk, hash), salt);
+        assertEq(cow.isValidSignature(hash, sig), bytes4(0x1626ba7e));
+    }
+
+    function test_twapPart_saltMismatch_rejected() public view {
+        GPv2Order.Data memory order = _order();
+        order.appData = cow.twapAppData(111);
+        bytes32 hash = GPv2Order.hash(order, settlement.domainSeparator());
+        // payload declares a different salt than the appData was built with
+        bytes memory sig = abi.encode(order, _sign(managerPk, hash), uint256(222));
+        assertEq(cow.isValidSignature(hash, sig), bytes4(0xffffffff));
+    }
+
+    // ---- cancellation ----
+
+    function _cancellationDigest(bytes[] memory uids) internal view returns (bytes32) {
+        bytes32 typeHash = keccak256("OrderCancellations(bytes[] orderUids)");
+        bytes32[] memory h = new bytes32[](uids.length);
+        for (uint256 i = 0; i < uids.length; i++) {
+            h[i] = keccak256(uids[i]);
+        }
+        bytes32 structHash = keccak256(abi.encode(typeHash, keccak256(abi.encodePacked(h))));
+        return keccak256(abi.encodePacked(hex"1901", settlement.domainSeparator(), structHash));
+    }
+
+    function _cancelUids() internal view returns (bytes[] memory uids) {
+        uids = new bytes[](2);
+        uids[0] = abi.encodePacked(keccak256("order-1"), address(vault), uint32(111));
+        uids[1] = abi.encodePacked(keccak256("order-2"), address(vault), uint32(222));
+    }
+
+    function test_validCancellation_isSignable() public view {
+        bytes[] memory uids = _cancelUids();
+        bytes32 digest = _cancellationDigest(uids);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(managerPk, digest);
+        bytes memory sig = abi.encode(uids, abi.encodePacked(r, s, v));
+        assertEq(cow.isValidSignature(digest, sig), bytes4(0x1626ba7e));
+    }
+
+    function test_cancellation_wrongSigner_rejected() public view {
+        bytes[] memory uids = _cancelUids();
+        bytes32 digest = _cancellationDigest(uids);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(0xB0B, digest);
+        bytes memory sig = abi.encode(uids, abi.encodePacked(r, s, v));
+        assertEq(cow.isValidSignature(digest, sig), bytes4(0xffffffff));
+    }
+
+    function test_cancellation_tamperedUids_rejected() public view {
+        bytes[] memory uids = _cancelUids();
+        bytes32 digest = _cancellationDigest(uids);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(managerPk, digest);
+        uids[0] = abi.encodePacked(keccak256("order-X"), address(vault), uint32(111)); // swap after signing
+        bytes memory sig = abi.encode(uids, abi.encodePacked(r, s, v));
+        assertEq(cow.isValidSignature(digest, sig), bytes4(0xffffffff));
     }
 }
