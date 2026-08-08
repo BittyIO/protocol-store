@@ -3,97 +3,19 @@ pragma solidity ^0.8.34;
 
 import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
 
-error OrderNotExpired();
-
-/**
- * @dev Reverts when a TWAP with an identical id (same params + block-timestamp salt) is already
- *      registered — i.e. a genuine duplicate created in the same block. Retry in a later block.
- */
-error TwapAlreadyRegistered(bytes32 twapId);
-
 /**
  * @title IBittyV1IntentProtocol
- * @notice Generic interface for vault-custodian intent protocols (CoW Swap, etc.). Protocol-agnostic
- *         by design: a new intent protocol implements this and the vault drives it unchanged.
+ * @notice Generic interface for vault-custodian intent protocols (CoW Swap, etc.). Intent orders are
+ *         gasless and off-chain: the asset manager signs an order off-chain and posts it to the
+ *         protocol's orderbook. The vault is the ERC-1271 signer and token custodian; it holds no
+ *         on-chain order registry.
  *
- *         The vault is the ERC-1271 signer and token custodian for all intent orders.
- *         The protocol clone is a pure instruction builder — it never holds tokens.
- *
- *         Order lifecycle:
- *           1. AssetManagerLogic calls buildLimitOrderInstructions() or buildTwapInstructions()
- *              (view call on clone — no state change).
- *           2. The vault executes OrderInstructions.registerCalldata on registerTarget
- *              (e.g. composableCow.create()) in its own context, so the order is registered under the
- *              vault's address.
- *           3. The vault grants allowance of sellAmount to approveTarget (e.g. CoW vaultRelayer).
- *           4. The vault's isValidSignature() iterates registered protocol clones and delegates
- *              to each clone's isValidSignature() until one returns the EIP-1271 magic value.
- *           5. On cancel, AssetManagerLogic executes CancelInstructions.cancelCalldata on
- *              cancelTarget and revokes the outstanding allowance.
+ *         At settlement the protocol calls the vault's isValidSignature(), which iterates the registered
+ *         protocol clones and delegates to each clone's isValidSignature() until one returns the EIP-1271
+ *         magic value. The clone validates the off-chain-signed order and defers the allow/auth decision
+ *         to the vault. Cancellation is off-chain (orderbook soft-cancel / order expiry).
  */
 interface IBittyV1IntentProtocol is IBittyV1Protocol {
-    struct OrderInstructions {
-        bytes32 orderId;
-        address sellToken;
-        uint256 sellAmount;
-        address approveTarget; // vault grants allowance of sellAmount to this address
-        address registerTarget; // vault calls this contract to register the order (address(0) = skip)
-        bytes registerCalldata; // calldata for the registration call
-    }
-
-    struct CancelInstructions {
-        address cancelTarget; // vault calls this to deregister the order (address(0) = skip)
-        bytes cancelCalldata;
-        address approveTarget; // vault revokes allowance from this address
-    }
-
-    event OrderCreated(bytes32 indexed orderId, address indexed vault);
-    event OrderCancelled(bytes32 indexed orderId, address indexed vault);
-    event TwapCreated(bytes32 indexed twapId, address indexed vault);
-    event TwapCancelled(bytes32 indexed twapId, address indexed vault);
-
-    /**
-     * @notice Build registration instructions for a single limit order whose proceeds settle to
-     * `recipient`. View only — no state change. Pass the vault as `recipient` for a normal order, or a
-     * receiver to settle straight to it. The receiver is bound into the order hash the vault registers
-     * and authorizes via isValidSignature.
-     * @param data abi.encode(sellToken, sellAmount, buyToken, buyAmountMin[, validTo[, isSellOrder]])
-     * @param recipient The address that receives the bought token.
-     */
-    function buildLimitOrderInstructions(bytes memory data, address recipient)
-        external
-        view
-        returns (OrderInstructions memory instructions);
-
-    /**
-     * @notice Build registration instructions for a TWAP order. View only — no state change.
-     * @param data abi.encode(sellToken, totalSellAmount, buyToken, minPartLimit, n, partDuration, span)
-     *             The implementation derives the fee-bearing appData hash on-chain from block.timestamp
-     *             (the salt) — the caller never supplies appData, so the 0.2% partner fee cannot be
-     *             stripped. Distinct block timestamps keep each TWAP's generated CoW part orders unique,
-     *             so multiple TWAPs can share a sell token. The off-chain layer must post the
-     *             byte-identical fullAppData for that timestamp to the CoW API.
-     * @return instructions  order registration + approval instructions
-     * @return expiresAt     timestamp after which the last slot has expired
-     */
-    function buildTwapInstructions(bytes memory data)
-        external
-        view
-        returns (OrderInstructions memory instructions, uint256 expiresAt);
-
-    /// @notice Build cancel/deregistration instructions for a limit order or TWAP.
-    function buildCancelInstructions(bytes32 orderId) external view returns (CancelInstructions memory instructions);
-
-    /**
-     * @notice Whether `orderId` has been (or may have been) filled on the underlying settlement — i.e.
-     *         some of its sell tokens have left the vault. The vault reads this BEFORE cancelling an order
-     *         (settlements may overwrite fill state on invalidation) to decide whether a cancelled/expired
-     *         order's reserved trade-cap budget can be reclaimed. Fill-or-kill orders are all-or-nothing so
-     *         this is exact for them; multi-part orders (TWAP) conservatively return true.
-     */
-    function orderFilled(bytes32 orderId) external view returns (bool);
-
-    /// @notice EIP-1271 — validate signatures for orders registered under the vault by this protocol.
-    ///         Called by vault.isValidSignature(); owner() must return the vault address.
+    /// @notice EIP-1271 — validate an off-chain-signed order for the vault that owns this protocol clone.
     function isValidSignature(bytes32 hash, bytes memory signature) external view returns (bytes4);
 }

@@ -131,7 +131,7 @@ contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
             uint256 dust = usds.balanceOf(address(this));
             if (dust > 0) usds.safeTransfer(msg.sender, dust);
             usdc.safeTransfer(recipient, gross);
-        return gross;
+            return gross;
         }
 
         uint256 usdsNeeded = amount * GEM_CONVERSION_FACTOR;

@@ -8,11 +8,7 @@ import {sepolia} from "../../../script/addresses.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IERC721} from "openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
-import {
-    IUniswapV3Factory,
-    IUniswapV3Pool,
-    IUniswapV3Router
-} from "protocol-contracts/src/libs/uniswap/v3/Uniswap.sol";
+import {IUniswapV3Factory, IUniswapV3Pool, IUniswapV3Router} from "protocol-contracts/src/libs/uniswap/v3/Uniswap.sol";
 import {INonfungiblePositionManager} from "protocol-contracts/src/libs/uniswap/v3/Uniswap.sol";
 
 /// @dev Sepolia Uniswap V3: use WETH9 + USDT at 0.05% fee (pool `0x614dED...`); WETH/USDC pools are not deployed.
