@@ -1,12 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {
-    IBittyV1StakingProtocol,
-    UnstakeMoreThanStaked,
-    InvalidAsset,
-    UnstakeToNotSupported
-} from "../interfaces/IBittyV1StakingProtocol.sol";
+import {IERC165} from "openzeppelin-contracts/contracts/utils/introspection/IERC165.sol";
+import {IBittyV1StakingProtocol, InvalidAsset, UnstakeToNotSupported} from "../interfaces/IBittyV1StakingProtocol.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
@@ -135,4 +131,16 @@ contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
             IERC20(address(weth)).safeTransfer(msg.sender, ethClaimed);
         }
     }
+
+    /**
+     * @notice Declares this adapter's CATEGORY, so callers need not keep a set per kind.
+     * @dev The vault asks this instead of consulting four separate allow-lists; the guard verifies it
+     *      once at registration, so a wrong answer is caught when the protocol is listed rather than
+     *      on every call that depends on it.
+     */
+    function supportsInterface(bytes4 interfaceId) public pure virtual returns (bool) {
+        return interfaceId == type(IBittyV1StakingProtocol).interfaceId
+            || interfaceId == type(IERC165).interfaceId;
+    }
+
 }

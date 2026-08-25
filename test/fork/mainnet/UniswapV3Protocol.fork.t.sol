@@ -12,9 +12,9 @@ import {
     Path,
     IUniswapV3Factory,
     IUniswapV3Pool,
-    IUniswapV3Router
+    IUniswapV3Router,
+    INonfungiblePositionManager
 } from "protocol-contracts/src/libs/uniswap/v3/Uniswap.sol";
-import {INonfungiblePositionManager} from "protocol-contracts/src/libs/uniswap/v3/Uniswap.sol";
 
 contract TestUniswapProtocolFork is Test {
     using SafeERC20 for IERC20;

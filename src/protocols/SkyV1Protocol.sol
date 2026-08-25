@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
+import {IERC165} from "openzeppelin-contracts/contracts/utils/introspection/IERC165.sol";
 import {
     IBittyV1StakingProtocol,
     InvalidAsset,
@@ -170,4 +171,16 @@ contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
     function claimUnstaked(uint256[] memory) external view override onlyOwner {
         revert ClaimUnstakedNotSupported();
     }
+
+    /**
+     * @notice Declares this adapter's CATEGORY, so callers need not keep a set per kind.
+     * @dev The vault asks this instead of consulting four separate allow-lists; the guard verifies it
+     *      once at registration, so a wrong answer is caught when the protocol is listed rather than
+     *      on every call that depends on it.
+     */
+    function supportsInterface(bytes4 interfaceId) public pure virtual returns (bool) {
+        return interfaceId == type(IBittyV1StakingProtocol).interfaceId
+            || interfaceId == type(IERC165).interfaceId;
+    }
+
 }
