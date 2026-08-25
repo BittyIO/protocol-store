@@ -19,7 +19,11 @@ via_ir = true
 [rpc_endpoints]
 sepolia = "https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}"
 mainnet = "https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}"
+# Public endpoint: the configured Alchemy key has neither Base enabled nor capacity left.
+base = "https://mainnet.base.org"
 
 [etherscan]
 sepolia = { key = "${ETHERSCAN_API_KEY}" }
 mainnet = { key = "${ETHERSCAN_API_KEY}" }
+# One Etherscan V2 key covers every chain; `chain` selects Basescan.
+base = { key = "${ETHERSCAN_API_KEY}", chain = 8453 }

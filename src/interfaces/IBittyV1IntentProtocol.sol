@@ -16,6 +16,12 @@ import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
  *         to the vault. Cancellation is off-chain (orderbook soft-cancel / order expiry).
  */
 interface IBittyV1IntentProtocol is IBittyV1Protocol {
-    /// @notice EIP-1271 — validate an off-chain-signed order for the vault that owns this protocol clone.
+    /**
+     * @notice EIP-1271 — validate an off-chain-signed order for the vault that owns this protocol clone.
+     * @dev EIP-1271 — validate an off-chain-signed order for the vault that owns this protocol clone.
+     * @param hash The hash of the order.
+     * @param signature The signature of the order.
+     * @return The magic value if the order is valid, otherwise the invalid value.
+     */
     function isValidSignature(bytes32 hash, bytes memory signature) external view returns (bytes4);
 }

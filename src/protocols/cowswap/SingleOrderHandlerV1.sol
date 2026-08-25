@@ -3,7 +3,6 @@ pragma solidity ^0.8.34;
 
 import {GPv2Order} from "../../libs/cow/GPv2Order.sol";
 import {IConditionalOrder} from "../../libs/cow/IConditionalOrder.sol";
-import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title SingleOrderHandlerV1

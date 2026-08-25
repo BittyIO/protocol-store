@@ -6,7 +6,7 @@ import {AaveV3Protocol} from "protocol-contracts/src/protocols/AaveV3Protocol.so
 import {sepolia} from "../../../script/addresses.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-import {IAaveV3, IAavePool, IPoolDataProvider} from "protocol-contracts/src/libs/aave/v3/Aave.sol";
+import {IAaveV3, IPoolDataProvider} from "protocol-contracts/src/libs/aave/v3/Aave.sol";
 
 contract TestAaveV3ProtocolSepoliaFork is Test {
     using SafeERC20 for IERC20;

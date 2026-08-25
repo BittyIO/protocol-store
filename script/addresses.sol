@@ -60,3 +60,29 @@ library sepolia {
     address public constant BITTY_GUARD = 0x00000000a63B8e2F5B96e3631953667A94e651dd;
 }
 
+/// @dev Base (chain 8453) addresses used by fork tests in `test/fork/base/`.
+library base {
+    address public constant WETH = 0x4200000000000000000000000000000000000006;
+    address public constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+    address public constant USDT = 0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2;
+    address public constant CBBTC = 0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf;
+
+    // Aave V3 Protocol. POOL_DATA_PROVIDER derived on chain from
+    // pool.ADDRESSES_PROVIDER().getPoolDataProvider().
+    address public constant AAVE_V3 = 0xA238Dd80C259a72e81d7e4664a9801593F98d1c5;
+    address public constant POOL_DATA_PROVIDER = 0x0F43731EB8d45A581f4a36DD74F5f358bc90C73A;
+
+    // Uniswap V3 Protocol
+    address public constant UNISWAP_V3_ROUTER = 0x2626664c2603336E57B271c5C0b26F421741e481;
+    address public constant UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER = 0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1;
+
+    // CoW Swap. Deployed deterministically, so identical to mainnet.
+    address public constant COW_SETTLEMENT = 0x9008D19f58AAbD9eD0D60971565AA8510560ab41;
+    address public constant COW_VAULT_RELAYER = 0xC92E8bdf79f0507f65a392b0ab4667716BFE0110;
+
+    // Sky. One PSM3 module rather than mainnet's PSM + ERC-4626 vault: sUSDS here is a plain ERC-20
+    // and cannot be deposited into, so SKY_PSM3 is the only way in or out.
+    address public constant USDS = 0x820C137fa70C8691f0e44Dc420a5e53c168921Dc;
+    address public constant S_USDS = 0x5875eEE11Cf8398102FdAd704C9E96607675467a;
+    address public constant SKY_PSM3 = 0x1601843c5E9bC251A3272907010AFa41Fa18347E;
+}

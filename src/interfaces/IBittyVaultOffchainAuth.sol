@@ -18,6 +18,16 @@ interface IBittyVaultOffchainAuth {
      *         least `sellAmount` and stays at or above its minimal-balance floor afterward. No on-chain
      *         reservation is written, so an over-signed order simply fails this check once its backing is
      *         gone — nothing leaks.
+     * @dev Authorize placing an order. MUST return true only when `signer` is the vault's asset
+     *         manager, `buyToken` is allow-listed, and the vault's raw ERC-20 balance of `sellToken` is at
+     *         least `sellAmount` and stays at or above its minimal-balance floor afterward. No on-chain
+     *         reservation is written, so an over-signed order simply fails this check once its backing is
+     *         gone — nothing leaks.
+     * @param signer The address of the signer.
+     * @param sellToken The address of the sell token.
+     * @param buyToken The address of the buy token.
+     * @param sellAmount The amount of the sell token.
+     * @return True if the order is authorized, false otherwise.
      */
     function isOffchainOrderAuthorized(address signer, address sellToken, address buyToken, uint256 sellAmount)
         external
@@ -28,6 +38,11 @@ interface IBittyVaultOffchainAuth {
      * @notice Authorize cancelling order(s). Cancellation only requires that `signer` is the vault's asset
      *         manager (no token/balance checks — cancelling never moves funds and is always allowed, even
      *         while trading is paused).
+     * @dev Authorize cancelling order(s). Cancellation only requires that `signer` is the vault's asset
+     *         manager (no token/balance checks — cancelling never moves funds and is always allowed, even
+     *         while trading is paused).
+     * @param signer The address of the signer.
+     * @return True if the signer is the vault's asset manager, false otherwise.
      */
     function isOffchainManager(address signer) external view returns (bool);
 }

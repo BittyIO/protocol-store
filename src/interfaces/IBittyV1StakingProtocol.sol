@@ -6,9 +6,6 @@ import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
 error UnstakeMoreThanStaked();
 error InvalidAsset();
 error ClaimUnstakedNotSupported();
-// Thrown by protocols whose unstake settles asynchronously (e.g. Lido's
-// withdrawal queue): they cannot deliver the asset to a recipient in the same
-// transaction, so on-behalf unstaking is not supported.
 error UnstakeToNotSupported();
 
 /**

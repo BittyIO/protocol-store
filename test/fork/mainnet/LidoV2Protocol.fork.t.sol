@@ -3,13 +3,12 @@ pragma solidity ^0.8.34;
 
 import "forge-std/console.sol";
 import {Test} from "forge-std/Test.sol";
-import {LidoV2Protocol} from "protocol-contracts/src/protocols/LidoV2Protocol.sol";
+import {LidoV2Protocol, WETHBalanceNotEnough} from "protocol-contracts/src/protocols/LidoV2Protocol.sol";
 import {mainnet} from "../../../script/addresses.sol";
 import {IStETH, IUnstETH} from "protocol-contracts/src/libs/lido/v2/Lido.sol";
 import {WETH} from "solmate/tokens/WETH.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Address} from "openzeppelin-contracts/contracts/utils/Address.sol";
-import {WETHBalanceNotEnough} from "protocol-contracts/src/protocols/LidoV2Protocol.sol";
 
 /// @dev Simulates Lido's unstETH: marks all requests as finalized and sends ETH on claimWithdrawal
 contract MockUnstETHSendsEth {

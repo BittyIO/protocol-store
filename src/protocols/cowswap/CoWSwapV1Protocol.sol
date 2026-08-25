@@ -2,11 +2,11 @@
 pragma solidity ^0.8.34;
 
 import {IBittyV1IntentProtocol} from "../../interfaces/IBittyV1IntentProtocol.sol";
+import {IERC165} from "openzeppelin-contracts/contracts/utils/introspection/IERC165.sol";
 import {IBittyVaultOffchainAuth} from "../../interfaces/IBittyVaultOffchainAuth.sol";
 import {IGPv2Settlement} from "../../libs/cow/IGPv2Settlement.sol";
 import {GPv2Order} from "../../libs/cow/GPv2Order.sol";
 import {IERC1271} from "../../libs/cow/IERC1271.sol";
-import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 import {ECDSA} from "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
@@ -248,5 +248,15 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
             return MAGICVALUE;
         }
         return INVALID;
+    }
+
+    /**
+     * @notice Declares this adapter's CATEGORY, so callers need not keep a set per kind.
+     * @dev The vault asks this instead of consulting four separate allow-lists; the guard verifies it
+     *      once at registration, so a wrong answer is caught when the protocol is listed rather than
+     *      on every call that depends on it.
+     */
+    function supportsInterface(bytes4 interfaceId) public pure virtual returns (bool) {
+        return interfaceId == type(IBittyV1IntentProtocol).interfaceId || interfaceId == type(IERC165).interfaceId;
     }
 }
