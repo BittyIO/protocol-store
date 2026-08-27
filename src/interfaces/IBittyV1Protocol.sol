@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
+/// @dev The adapter does not handle this asset. Raised by deposits and withdrawals alike, which is
+///      why it lives on the base rather than on either capability.
+error InvalidAsset();
+
 /**
  * @title IBittyV1Protocol
  * @notice Interface for all protocols.

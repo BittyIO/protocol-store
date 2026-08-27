@@ -82,14 +82,14 @@ contract TestAaveProtocolFork is Test {
     }
 
     function test_GetBalance() public {
-        uint256 balanceBefore = aaveProtocol.getSuppliedBalance(address(mainnet.WETH));
+        uint256 balanceBefore = aaveProtocol.getBalance(address(mainnet.WETH));
         assertEq(balanceBefore, 0);
 
         IERC20(address(mainnet.WETH)).forceApprove(address(aaveProtocol), 1 ether);
         deal(address(mainnet.WETH), address(this), 1 ether);
         aaveProtocol.deposit(address(mainnet.WETH), 1 ether);
 
-        uint256 balanceAfter = aaveProtocol.getSuppliedBalance(address(mainnet.WETH));
+        uint256 balanceAfter = aaveProtocol.getBalance(address(mainnet.WETH));
         assertApproxEqAbs(balanceAfter, 1 ether, 10);
 
         (uint256 currentATokenBalance,,,,,,,,) =
@@ -113,14 +113,14 @@ contract TestAaveProtocolFork is Test {
         deal(address(mainnet.WETH), address(this), 1 ether);
         aaveProtocol.deposit(address(mainnet.WETH), 1 ether);
 
-        uint256 wethBalance = aaveProtocol.getSuppliedBalance(address(mainnet.WETH));
+        uint256 wethBalance = aaveProtocol.getBalance(address(mainnet.WETH));
         assertApproxEqAbs(wethBalance, 1 ether, 10);
 
         deal(address(mainnet.USDC), address(this), 1000e6);
         IERC20(address(mainnet.USDC)).forceApprove(address(aaveProtocol), 1000e6);
         aaveProtocol.deposit(address(mainnet.USDC), 1000e6);
 
-        uint256 usdcBalance = aaveProtocol.getSuppliedBalance(address(mainnet.USDC));
+        uint256 usdcBalance = aaveProtocol.getBalance(address(mainnet.USDC));
         assertApproxEqAbs(usdcBalance, 1000e6, 10);
     }
 }

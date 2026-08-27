@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {
-    IBittyV1StakingProtocol,
-    InvalidAsset,
-    ClaimUnstakedNotSupported
-} from "../interfaces/IBittyV1StakingProtocol.sol";
+import {IBittyV1Protocol, InvalidAsset} from "../interfaces/IBittyV1Protocol.sol";
+import {IBittyV1Depositable} from "../interfaces/IBittyV1Depositable.sol";
+import {IBittyV1Withdrawable} from "../interfaces/IBittyV1Withdrawable.sol";
+import {ClaimNotSupported} from "../interfaces/IBittyV1Withdrawable.sol";
 import {IPsm3} from "../libs/sky/Psm3.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -31,7 +30,7 @@ error PsmAssetMismatch();
  *      As with {SkyV1Protocol}, the receipt token (sUSDS) is held by the VAULT, not by this adapter:
  *      the adapter is a stateless router and holds nothing between calls.
  */
-contract SkyV1EvmProtocol is IBittyV1StakingProtocol, Ownable, Initializable {
+contract SkyV1EvmProtocol is IBittyV1Protocol, IBittyV1Depositable, IBittyV1Withdrawable, Ownable, Initializable {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable usdc;
@@ -76,7 +75,7 @@ contract SkyV1EvmProtocol is IBittyV1StakingProtocol, Ownable, Initializable {
         }
     }
 
-    function getStakedBalance(address asset) external view override returns (uint256) {
+    function getBalance(address asset) external view override returns (uint256) {
         if (asset != address(usdc)) revert InvalidAsset();
         uint256 shares = sUsds.balanceOf(owner());
         if (shares == 0) return 0;
@@ -116,11 +115,11 @@ contract SkyV1EvmProtocol is IBittyV1StakingProtocol, Ownable, Initializable {
         }
     }
 
-    function getUnstakeRequestIds() external pure override returns (uint256[] memory) {
+    function getPendingWithdrawalIds() external pure override returns (uint256[] memory) {
         return new uint256[](0);
     }
 
-    function claimUnstaked(uint256[] memory) external view override onlyOwner {
-        revert ClaimUnstakedNotSupported();
+    function claimWithdrawals(uint256[] memory) external view override onlyOwner {
+        revert ClaimNotSupported();
     }
 }

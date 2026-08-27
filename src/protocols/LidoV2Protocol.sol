@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IBittyV1StakingProtocol, InvalidAsset, UnstakeToNotSupported} from "../interfaces/IBittyV1StakingProtocol.sol";
+import {IBittyV1Protocol, InvalidAsset} from "../interfaces/IBittyV1Protocol.sol";
+import {IBittyV1Depositable} from "../interfaces/IBittyV1Depositable.sol";
+import {IBittyV1Withdrawable, WithdrawToNotSupported} from "../interfaces/IBittyV1Withdrawable.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
@@ -12,7 +14,7 @@ import {EnumerableSet} from "openzeppelin-contracts/contracts/utils/structs/Enum
 
 error WETHBalanceNotEnough();
 
-contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
+contract LidoV2Protocol is IBittyV1Protocol, IBittyV1Depositable, IBittyV1Withdrawable, Ownable, Initializable {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.UintSet;
     EnumerableSet.UintSet private _unstakeRequests;
@@ -63,14 +65,14 @@ contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         }
     }
 
-    function getStakedBalance(address asset) external view override returns (uint256) {
+    function getBalance(address asset) external view override returns (uint256) {
         if (asset != address(weth)) {
             revert InvalidAsset();
         }
         return stETH.balanceOf(owner());
     }
 
-    function getUnstakeRequestIds() external view override returns (uint256[] memory) {
+    function getPendingWithdrawalIds() external view override returns (uint256[] memory) {
         return _unstakeRequests.values();
     }
 
@@ -80,7 +82,7 @@ contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         onlyOwner
         returns (uint256 delivered)
     {
-        if (recipient != owner()) revert UnstakeToNotSupported();
+        if (recipient != owner()) revert WithdrawToNotSupported();
         if (asset != address(weth)) {
             revert InvalidAsset();
         }
@@ -100,7 +102,7 @@ contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         return 0;
     }
 
-    function claimUnstaked(uint256[] memory requestIds) external override onlyOwner {
+    function claimWithdrawals(uint256[] memory requestIds) external override onlyOwner {
         uint256[] memory oneIds = new uint256[](1);
         uint256 ethBefore = address(this).balance;
         for (uint256 i = 0; i < requestIds.length; i++) {

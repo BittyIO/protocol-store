@@ -116,7 +116,7 @@ contract TestLidoProtocolFork is Test {
         lidoProtocol.withdraw(address(weth), type(uint256).max, address(this));
 
         assertLe(stETH.balanceOf(address(this)), 2, "stETH fully unstaked");
-        assertEq(lidoProtocol.getUnstakeRequestIds().length, 1, "withdrawal request created");
+        assertEq(lidoProtocol.getPendingWithdrawalIds().length, 1, "withdrawal request created");
     }
 
     function test_Claim_ReturnWETHToVault() public {
@@ -133,7 +133,7 @@ contract TestLidoProtocolFork is Test {
 
         uint256[] memory requestIds = new uint256[](1);
         requestIds[0] = 1;
-        protocol.claimUnstaked(requestIds);
+        protocol.claimWithdrawals(requestIds);
 
         assertEq(address(protocol).balance, 0, "protocol should have 0 ETH after claim");
         assertEq(IERC20(mainnet.WETH).balanceOf(address(protocol)), 0, "protocol should have 0 WETH after claim");
@@ -162,7 +162,7 @@ contract TestLidoProtocolFork is Test {
         for (uint256 i = 0; i < numRequests; i++) {
             requestIds[i] = i + 1;
         }
-        protocol.claimUnstaked(requestIds);
+        protocol.claimWithdrawals(requestIds);
 
         assertEq(address(protocol).balance, 0, "protocol should have 0 ETH after claim");
         assertEq(IERC20(mainnet.WETH).balanceOf(address(protocol)), 0, "protocol should have 0 WETH after claim");
@@ -189,7 +189,7 @@ contract TestLidoProtocolFork is Test {
 
         uint256[] memory requestIds = new uint256[](1);
         requestIds[0] = 1;
-        protocol.claimUnstaked(requestIds);
+        protocol.claimWithdrawals(requestIds);
 
         // Yield fee removed: the entire claimed amount goes to the caller, nothing to the old fee recipient.
         assertEq(weth.balanceOf(0x12EE2de7BF086388B1D560eb95e7191Edfab9823), feeRecipientBefore, "no yield fee taken");
@@ -197,7 +197,7 @@ contract TestLidoProtocolFork is Test {
     }
 
     function test_Claim_emptyUnstakeRequests_doesNotRevert() public {
-        lidoProtocol.claimUnstaked(new uint256[](0));
+        lidoProtocol.claimWithdrawals(new uint256[](0));
     }
 
     function test_Claim_multipleRequests_allClaimedAndRemoved() public {
@@ -216,7 +216,7 @@ contract TestLidoProtocolFork is Test {
             lidoProtocol.withdraw(address(weth), amountPerRequest, address(this));
         }
 
-        uint256[] memory ids = lidoProtocol.getUnstakeRequestIds();
+        uint256[] memory ids = lidoProtocol.getPendingWithdrawalIds();
         assertEq(ids.length, numRequests, "all unstake requests should be tracked");
 
         for (uint256 i = 0; i < ids.length; i++) {
@@ -243,10 +243,10 @@ contract TestLidoProtocolFork is Test {
 
             vm.mockCall(address(unstETH), abi.encodeWithSelector(IUnstETH.claimWithdrawal.selector, id), "");
         }
-        uint256[] memory requestIds = lidoProtocol.getUnstakeRequestIds();
-        lidoProtocol.claimUnstaked(requestIds);
+        uint256[] memory requestIds = lidoProtocol.getPendingWithdrawalIds();
+        lidoProtocol.claimWithdrawals(requestIds);
 
-        uint256[] memory remaining = lidoProtocol.getUnstakeRequestIds();
+        uint256[] memory remaining = lidoProtocol.getPendingWithdrawalIds();
         assertEq(remaining.length, 0, "all claimable requests must be removed");
     }
 }

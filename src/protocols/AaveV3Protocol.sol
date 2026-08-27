@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IBittyV1LendingProtocol} from "../interfaces/IBittyV1LendingProtocol.sol";
+import {IBittyV1Protocol} from "../interfaces/IBittyV1Protocol.sol";
+import {IBittyV1Depositable} from "../interfaces/IBittyV1Depositable.sol";
+import {IBittyV1Withdrawable, ClaimNotSupported} from "../interfaces/IBittyV1Withdrawable.sol";
 import {IAaveV3, IAavePool, IPoolDataProvider} from "../libs/aave/v3/Aave.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
-contract AaveV3Protocol is IBittyV1LendingProtocol, Ownable, Initializable {
+contract AaveV3Protocol is IBittyV1Protocol, IBittyV1Depositable, IBittyV1Withdrawable, Ownable, Initializable {
     using SafeERC20 for IERC20;
     address public immutable aaveV3;
     address public immutable poolDataProvider;
@@ -74,8 +76,18 @@ contract AaveV3Protocol is IBittyV1LendingProtocol, Ownable, Initializable {
         IERC20(asset).safeTransfer(recipient, delivered);
     }
 
-    function getSuppliedBalance(address asset) external view override returns (uint256) {
+    function getBalance(address asset) external view override returns (uint256) {
         (uint256 currentATokenBalance,,,,,,,,) = IPoolDataProvider(poolDataProvider).getUserReserveData(asset, owner());
         return currentATokenBalance;
+    }
+
+    /// @dev Aave settles withdrawals in the same call, so nothing is ever outstanding.
+    function getPendingWithdrawalIds() external pure override returns (uint256[] memory) {
+        return new uint256[](0);
+    }
+
+    /// @dev Unreachable through {getPendingWithdrawalIds}, which never returns an id to claim.
+    function claimWithdrawals(uint256[] memory) external view override onlyOwner {
+        revert ClaimNotSupported();
     }
 }

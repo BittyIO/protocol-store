@@ -2,12 +2,13 @@
 pragma solidity ^0.8.34;
 
 import {Test} from "forge-std/Test.sol";
+import {ClaimNotSupported} from "protocol-contracts/src/interfaces/IBittyV1Withdrawable.sol";
 import {SkyV1EvmProtocol, PsmAssetMismatch} from "protocol-contracts/src/protocols/SkyV1EvmProtocol.sol";
 import {IPsm3} from "protocol-contracts/src/libs/sky/Psm3.sol";
 import {base} from "../../../script/addresses.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-import {InvalidAsset, ClaimUnstakedNotSupported} from "protocol-contracts/src/interfaces/IBittyV1StakingProtocol.sol";
+import {InvalidAsset} from "protocol-contracts/src/interfaces/IBittyV1Protocol.sol";
 
 contract TestSkyV1EvmProtocolFork is Test {
     using SafeERC20 for IERC20;
@@ -71,7 +72,7 @@ contract TestSkyV1EvmProtocolFork is Test {
         usdc.forceApprove(address(sky), STAKE_AMOUNT);
         sky.deposit(base.USDC, STAKE_AMOUNT);
 
-        uint256 valued = sky.getStakedBalance(base.USDC);
+        uint256 valued = sky.getBalance(base.USDC);
         // A conversion, not a trade: the round trip must return the stake bar integer rounding.
         assertApproxEqAbs(valued, STAKE_AMOUNT, 2, "round trip lost value");
     }
@@ -115,7 +116,7 @@ contract TestSkyV1EvmProtocolFork is Test {
 
     function test_RevertsOnWrongAsset() public {
         vm.expectRevert(InvalidAsset.selector);
-        sky.getStakedBalance(base.USDT);
+        sky.getBalance(base.USDT);
 
         vm.expectRevert(InvalidAsset.selector);
         sky.deposit(base.USDT, 1e6);
@@ -125,8 +126,8 @@ contract TestSkyV1EvmProtocolFork is Test {
     }
 
     function test_NoWithdrawalQueue() public {
-        assertEq(sky.getUnstakeRequestIds().length, 0);
-        vm.expectRevert(ClaimUnstakedNotSupported.selector);
-        sky.claimUnstaked(new uint256[](0));
+        assertEq(sky.getPendingWithdrawalIds().length, 0);
+        vm.expectRevert(ClaimNotSupported.selector);
+        sky.claimWithdrawals(new uint256[](0));
     }
 }

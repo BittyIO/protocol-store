@@ -2,12 +2,13 @@
 pragma solidity ^0.8.34;
 
 import {Test} from "forge-std/Test.sol";
+import {ClaimNotSupported} from "protocol-contracts/src/interfaces/IBittyV1Withdrawable.sol";
 import {SkyV1Protocol} from "protocol-contracts/src/protocols/SkyV1Protocol.sol";
 import {IDssPsm, ISUsds} from "protocol-contracts/src/libs/sky/Sky.sol";
 import {mainnet} from "../../../script/addresses.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-import {InvalidAsset, ClaimUnstakedNotSupported} from "protocol-contracts/src/interfaces/IBittyV1StakingProtocol.sol";
+import {InvalidAsset} from "protocol-contracts/src/interfaces/IBittyV1Protocol.sol";
 
 contract TestSkyV1ProtocolFork is Test {
     using SafeERC20 for IERC20;
@@ -79,21 +80,21 @@ contract TestSkyV1ProtocolFork is Test {
     }
 
     function test_GetStakedBalance_ZeroBeforeStake() public view {
-        assertEq(skyProtocol.getStakedBalance(mainnet.USDC), 0);
+        assertEq(skyProtocol.getBalance(mainnet.USDC), 0);
     }
 
     function test_GetStakedBalance_AfterStake() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
         usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
         skyProtocol.deposit(mainnet.USDC, STAKE_AMOUNT);
-        uint256 balance = skyProtocol.getStakedBalance(mainnet.USDC);
+        uint256 balance = skyProtocol.getBalance(mainnet.USDC);
         assertGt(balance, 0);
         assertApproxEqAbs(balance, STAKE_AMOUNT, STAKE_AMOUNT / 100);
     }
 
     function test_GetStakedBalance_RevertOnWrongAsset() public {
         vm.expectRevert(InvalidAsset.selector);
-        skyProtocol.getStakedBalance(mainnet.WETH);
+        skyProtocol.getBalance(mainnet.WETH);
     }
 
     function test_Unstake() public {
@@ -102,7 +103,7 @@ contract TestSkyV1ProtocolFork is Test {
         skyProtocol.deposit(mainnet.USDC, STAKE_AMOUNT);
 
         IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
-        uint256 stakedBalance = skyProtocol.getStakedBalance(mainnet.USDC);
+        uint256 stakedBalance = skyProtocol.getBalance(mainnet.USDC);
         uint256 usdcBefore = usdc.balanceOf(address(this));
 
         skyProtocol.withdraw(mainnet.USDC, stakedBalance, address(this));
@@ -118,7 +119,7 @@ contract TestSkyV1ProtocolFork is Test {
         skyProtocol.deposit(mainnet.USDC, STAKE_AMOUNT);
 
         IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
-        uint256 stakedBalance = skyProtocol.getStakedBalance(mainnet.USDC);
+        uint256 stakedBalance = skyProtocol.getBalance(mainnet.USDC);
         skyProtocol.withdraw(mainnet.USDC, stakedBalance, address(this));
 
         assertGe(usds.allowance(address(skyProtocol), mainnet.SKY_PSM), type(uint256).max / 2);
@@ -145,7 +146,7 @@ contract TestSkyV1ProtocolFork is Test {
         IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
         vm.mockCall(mainnet.SKY_PSM, abi.encodeWithSelector(IDssPsm.tout.selector), abi.encode(uint256(1e15)));
 
-        uint256 gross = skyProtocol.getStakedBalance(mainnet.USDC);
+        uint256 gross = skyProtocol.getBalance(mainnet.USDC);
         vm.expectRevert();
         skyProtocol.withdraw(mainnet.USDC, gross, address(this));
 
@@ -159,12 +160,12 @@ contract TestSkyV1ProtocolFork is Test {
     }
 
     function test_GetUnstakeRequestIds_AlwaysEmpty() public view {
-        assertEq(skyProtocol.getUnstakeRequestIds().length, 0);
+        assertEq(skyProtocol.getPendingWithdrawalIds().length, 0);
     }
 
     function test_ClaimUnstaked_Revert() public {
-        vm.expectRevert(ClaimUnstakedNotSupported.selector);
-        skyProtocol.claimUnstaked(new uint256[](3));
+        vm.expectRevert(ClaimNotSupported.selector);
+        skyProtocol.claimWithdrawals(new uint256[](3));
     }
 
     function test_StakeUnstakeRoundTrip_YieldAccrues() public {
@@ -174,7 +175,7 @@ contract TestSkyV1ProtocolFork is Test {
 
         vm.warp(block.timestamp + 365 days);
 
-        uint256 balanceAfterYield = skyProtocol.getStakedBalance(mainnet.USDC);
+        uint256 balanceAfterYield = skyProtocol.getBalance(mainnet.USDC);
         assertGe(balanceAfterYield, STAKE_AMOUNT);
     }
 
@@ -185,7 +186,7 @@ contract TestSkyV1ProtocolFork is Test {
 
         vm.warp(block.timestamp + 365 days);
 
-        uint256 gross = skyProtocol.getStakedBalance(mainnet.USDC);
+        uint256 gross = skyProtocol.getBalance(mainnet.USDC);
         assertGt(gross, STAKE_AMOUNT);
 
         IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);

@@ -55,13 +55,13 @@ contract TestAaveV3ProtocolSepoliaFork is Test {
     }
 
     function test_GetBalance() public {
-        assertEq(aaveProtocol.getSuppliedBalance(sepolia.AAVE_WETH), 0);
+        assertEq(aaveProtocol.getBalance(sepolia.AAVE_WETH), 0);
 
         deal(sepolia.AAVE_WETH, address(this), 1 ether);
         IERC20(sepolia.AAVE_WETH).forceApprove(address(aaveProtocol), 1 ether);
         aaveProtocol.deposit(sepolia.AAVE_WETH, 1 ether);
 
-        uint256 balanceAfter = aaveProtocol.getSuppliedBalance(sepolia.AAVE_WETH);
+        uint256 balanceAfter = aaveProtocol.getBalance(sepolia.AAVE_WETH);
         assertApproxEqAbs(balanceAfter, 1 ether, 10);
 
         (uint256 currentATokenBalance,,,,,,,,) = poolDataProvider.getUserReserveData(sepolia.AAVE_WETH, address(this));
