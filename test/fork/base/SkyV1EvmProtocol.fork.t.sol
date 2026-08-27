@@ -57,7 +57,7 @@ contract TestSkyV1EvmProtocolFork is Test {
         usdc.forceApprove(address(sky), STAKE_AMOUNT);
 
         uint256 expected = psm.previewSwapExactIn(base.USDC, base.S_USDS, STAKE_AMOUNT);
-        sky.stake(base.USDC, STAKE_AMOUNT);
+        sky.deposit(base.USDC, STAKE_AMOUNT);
 
         // The receipt token lands with the CALLER (the vault), never with the adapter.
         assertEq(sUsds.balanceOf(address(this)), expected, "vault did not receive sUSDS");
@@ -69,7 +69,7 @@ contract TestSkyV1EvmProtocolFork is Test {
     function test_StakedBalance_IsWorthAboutWhatWentIn() public {
         deal(base.USDC, address(this), STAKE_AMOUNT);
         usdc.forceApprove(address(sky), STAKE_AMOUNT);
-        sky.stake(base.USDC, STAKE_AMOUNT);
+        sky.deposit(base.USDC, STAKE_AMOUNT);
 
         uint256 valued = sky.getStakedBalance(base.USDC);
         // A conversion, not a trade: the round trip must return the stake bar integer rounding.
@@ -79,7 +79,7 @@ contract TestSkyV1EvmProtocolFork is Test {
     function test_Unstake_ExactAmount_DeliversToRecipient() public {
         deal(base.USDC, address(this), STAKE_AMOUNT);
         usdc.forceApprove(address(sky), STAKE_AMOUNT);
-        sky.stake(base.USDC, STAKE_AMOUNT);
+        sky.deposit(base.USDC, STAKE_AMOUNT);
 
         address recipient = makeAddr("recipient");
         uint256 want = 400e6;
@@ -96,7 +96,7 @@ contract TestSkyV1EvmProtocolFork is Test {
     function test_Unstake_Max_DrainsThePosition() public {
         deal(base.USDC, address(this), STAKE_AMOUNT);
         usdc.forceApprove(address(sky), STAKE_AMOUNT);
-        sky.stake(base.USDC, STAKE_AMOUNT);
+        sky.deposit(base.USDC, STAKE_AMOUNT);
 
         address recipient = makeAddr("recipient");
         sUsds.forceApprove(address(sky), type(uint256).max);
@@ -118,7 +118,7 @@ contract TestSkyV1EvmProtocolFork is Test {
         sky.getStakedBalance(base.USDT);
 
         vm.expectRevert(InvalidAsset.selector);
-        sky.stake(base.USDT, 1e6);
+        sky.deposit(base.USDT, 1e6);
 
         vm.expectRevert(InvalidAsset.selector);
         sky.withdraw(base.USDT, 1e6, address(this));

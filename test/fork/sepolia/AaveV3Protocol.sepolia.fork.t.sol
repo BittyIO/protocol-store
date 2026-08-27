@@ -26,7 +26,7 @@ contract TestAaveV3ProtocolSepoliaFork is Test {
         IERC20(sepolia.AAVE_WETH).forceApprove(address(aaveProtocol), 1 ether);
         uint256 balanceBefore = IERC20(sepolia.AAVE_WETH).balanceOf(address(this));
 
-        aaveProtocol.supply(sepolia.AAVE_WETH, 1 ether);
+        aaveProtocol.deposit(sepolia.AAVE_WETH, 1 ether);
 
         assertEq(IERC20(sepolia.AAVE_WETH).balanceOf(address(this)), balanceBefore - 1 ether);
         (uint256 currentATokenBalance,,,,,,,,) = poolDataProvider.getUserReserveData(sepolia.AAVE_WETH, address(this));
@@ -37,7 +37,7 @@ contract TestAaveV3ProtocolSepoliaFork is Test {
         deal(sepolia.AAVE_WETH, address(this), 1 ether);
         IERC20(sepolia.AAVE_WETH).forceApprove(address(aaveProtocol), 1 ether);
         uint256 balanceBeforeSupply = IERC20(sepolia.AAVE_WETH).balanceOf(address(this));
-        aaveProtocol.supply(sepolia.AAVE_WETH, 1 ether);
+        aaveProtocol.deposit(sepolia.AAVE_WETH, 1 ether);
 
         (uint256 aTokenBalance,,,,,,,,) = poolDataProvider.getUserReserveData(sepolia.AAVE_WETH, address(this));
 
@@ -59,7 +59,7 @@ contract TestAaveV3ProtocolSepoliaFork is Test {
 
         deal(sepolia.AAVE_WETH, address(this), 1 ether);
         IERC20(sepolia.AAVE_WETH).forceApprove(address(aaveProtocol), 1 ether);
-        aaveProtocol.supply(sepolia.AAVE_WETH, 1 ether);
+        aaveProtocol.deposit(sepolia.AAVE_WETH, 1 ether);
 
         uint256 balanceAfter = aaveProtocol.getSuppliedBalance(sepolia.AAVE_WETH);
         assertApproxEqAbs(balanceAfter, 1 ether, 10);
@@ -71,7 +71,7 @@ contract TestAaveV3ProtocolSepoliaFork is Test {
     function test_Supply_UsesMaxApproval() public {
         deal(sepolia.AAVE_WETH, address(this), 1 ether);
         IERC20(sepolia.AAVE_WETH).forceApprove(address(aaveProtocol), 1 ether);
-        aaveProtocol.supply(sepolia.AAVE_WETH, 1 ether);
+        aaveProtocol.deposit(sepolia.AAVE_WETH, 1 ether);
 
         address pool = address(IAaveV3(sepolia.AAVE_V3).getPool());
         uint256 remaining = IERC20(sepolia.AAVE_WETH).allowance(address(aaveProtocol), pool);

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.34;
 
 import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
+import {IBittyV1Depositable} from "./IBittyV1Depositable.sol";
 import {IBittyV1Withdrawable} from "./IBittyV1Withdrawable.sol";
 
 error UnstakeMoreThanStaked();
@@ -14,15 +15,7 @@ error UnstakeToNotSupported();
  * @notice Interface for staking protocols.
  * @dev This interface is used to stake and unstake the asset.
  */
-interface IBittyV1StakingProtocol is IBittyV1Protocol, IBittyV1Withdrawable {
-    /**
-     * @notice Stake the asset to the staking protocol.
-     * @dev Stake the asset to the staking protocol.
-     * @param asset The address of the asset.
-     * @param amount The amount of the asset.
-     */
-    function stake(address asset, uint256 amount) external payable;
-
+interface IBittyV1StakingProtocol is IBittyV1Protocol, IBittyV1Depositable, IBittyV1Withdrawable {
     /**
      * @notice Get the staking balance.
      * @dev Get the staking balance.

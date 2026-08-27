@@ -2,17 +2,10 @@
 pragma solidity ^0.8.34;
 
 import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
+import {IBittyV1Depositable} from "./IBittyV1Depositable.sol";
 import {IBittyV1Withdrawable} from "./IBittyV1Withdrawable.sol";
 
-interface IBittyV1LendingProtocol is IBittyV1Protocol, IBittyV1Withdrawable {
-    /**
-     * @notice Supply the asset to the lending protocol.
-     * @dev Supply the asset to the lending protocol.
-     * @param asset The address of the asset.
-     * @param amount The amount of the asset.
-     */
-    function supply(address asset, uint256 amount) external payable;
-
+interface IBittyV1LendingProtocol is IBittyV1Protocol, IBittyV1Depositable, IBittyV1Withdrawable {
     /**
      * @notice Get the lending balance of the asset.
      * @dev Get the lending balance of the asset.

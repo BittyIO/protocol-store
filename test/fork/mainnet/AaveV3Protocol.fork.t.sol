@@ -28,7 +28,7 @@ contract TestAaveProtocolFork is Test {
         deal(address(mainnet.WETH), address(this), 1 ether);
         uint256 balanceBefore = IERC20(address(mainnet.WETH)).balanceOf(address(this));
 
-        aaveProtocol.supply(address(mainnet.WETH), 1 ether);
+        aaveProtocol.deposit(address(mainnet.WETH), 1 ether);
 
         uint256 balanceAfter = IERC20(address(mainnet.WETH)).balanceOf(address(this));
         assertEq(balanceAfter, balanceBefore - 1 ether);
@@ -42,7 +42,7 @@ contract TestAaveProtocolFork is Test {
         IERC20(address(mainnet.WETH)).forceApprove(address(aaveProtocol), 1 ether);
         deal(address(mainnet.WETH), address(this), 1 ether);
         uint256 balanceBeforeSupply = IERC20(address(mainnet.WETH)).balanceOf(address(this));
-        aaveProtocol.supply(address(mainnet.WETH), 1 ether);
+        aaveProtocol.deposit(address(mainnet.WETH), 1 ether);
 
         (uint256 aTokenBalance,,,,,,,,) = poolDataProvider.getUserReserveData(address(mainnet.WETH), address(this));
 
@@ -66,7 +66,7 @@ contract TestAaveProtocolFork is Test {
         IERC20(address(mainnet.WETH)).forceApprove(address(aaveProtocol), 1 ether);
         deal(address(mainnet.WETH), address(this), 1 ether);
         uint256 balanceBeforeSupply = IERC20(address(mainnet.WETH)).balanceOf(address(this));
-        aaveProtocol.supply(address(mainnet.WETH), 1 ether);
+        aaveProtocol.deposit(address(mainnet.WETH), 1 ether);
 
         address aToken = aaveProtocol.receiptTokenOf(address(mainnet.WETH));
         IERC20(aToken).forceApprove(address(aaveProtocol), type(uint256).max);
@@ -87,7 +87,7 @@ contract TestAaveProtocolFork is Test {
 
         IERC20(address(mainnet.WETH)).forceApprove(address(aaveProtocol), 1 ether);
         deal(address(mainnet.WETH), address(this), 1 ether);
-        aaveProtocol.supply(address(mainnet.WETH), 1 ether);
+        aaveProtocol.deposit(address(mainnet.WETH), 1 ether);
 
         uint256 balanceAfter = aaveProtocol.getSuppliedBalance(address(mainnet.WETH));
         assertApproxEqAbs(balanceAfter, 1 ether, 10);
@@ -101,7 +101,7 @@ contract TestAaveProtocolFork is Test {
         deal(address(mainnet.WETH), address(this), 1 ether);
         IERC20(address(mainnet.WETH)).forceApprove(address(aaveProtocol), 1 ether);
 
-        aaveProtocol.supply(address(mainnet.WETH), 1 ether);
+        aaveProtocol.deposit(address(mainnet.WETH), 1 ether);
 
         address pool = address(IAaveV3(mainnet.AAVE_V3).getPool());
         uint256 remaining = IERC20(address(mainnet.WETH)).allowance(address(aaveProtocol), pool);
@@ -111,14 +111,14 @@ contract TestAaveProtocolFork is Test {
     function test_SupplyMultipleAssets() public {
         IERC20(address(mainnet.WETH)).forceApprove(address(aaveProtocol), 1 ether);
         deal(address(mainnet.WETH), address(this), 1 ether);
-        aaveProtocol.supply(address(mainnet.WETH), 1 ether);
+        aaveProtocol.deposit(address(mainnet.WETH), 1 ether);
 
         uint256 wethBalance = aaveProtocol.getSuppliedBalance(address(mainnet.WETH));
         assertApproxEqAbs(wethBalance, 1 ether, 10);
 
         deal(address(mainnet.USDC), address(this), 1000e6);
         IERC20(address(mainnet.USDC)).forceApprove(address(aaveProtocol), 1000e6);
-        aaveProtocol.supply(address(mainnet.USDC), 1000e6);
+        aaveProtocol.deposit(address(mainnet.USDC), 1000e6);
 
         uint256 usdcBalance = aaveProtocol.getSuppliedBalance(address(mainnet.USDC));
         assertApproxEqAbs(usdcBalance, 1000e6, 10);

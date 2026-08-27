@@ -59,7 +59,7 @@ contract SkyV1EvmProtocol is IBittyV1StakingProtocol, Ownable, Initializable {
         _transferOwnership(newOwner);
     }
 
-    function stake(address asset, uint256 amount) external payable override onlyOwner {
+    function deposit(address asset, uint256 amount) external override onlyOwner {
         if (asset != address(usdc)) revert InvalidAsset();
 
         usdc.safeTransferFrom(msg.sender, address(this), amount);

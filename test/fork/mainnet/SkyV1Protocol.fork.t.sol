@@ -54,7 +54,7 @@ contract TestSkyV1ProtocolFork is Test {
         uint256 usdcBefore = usdc.balanceOf(address(this));
         uint256 sharesBefore = sUsds.balanceOf(address(skyProtocol));
 
-        skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
+        skyProtocol.deposit(mainnet.USDC, STAKE_AMOUNT);
 
         assertEq(usdc.balanceOf(address(this)), usdcBefore - STAKE_AMOUNT);
         assertEq(usdc.balanceOf(address(skyProtocol)), 0);
@@ -65,7 +65,7 @@ contract TestSkyV1ProtocolFork is Test {
     function test_Stake_UsesMaxApproval() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
         usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
-        skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
+        skyProtocol.deposit(mainnet.USDC, STAKE_AMOUNT);
 
         assertGe(usdc.allowance(address(skyProtocol), mainnet.SKY_PSM), type(uint256).max / 2);
         assertGe(usds.allowance(address(skyProtocol), mainnet.S_USDS), type(uint256).max / 2);
@@ -75,7 +75,7 @@ contract TestSkyV1ProtocolFork is Test {
         deal(mainnet.WETH, address(this), 1 ether);
         IERC20(mainnet.WETH).forceApprove(address(skyProtocol), 1 ether);
         vm.expectRevert(InvalidAsset.selector);
-        skyProtocol.stake(mainnet.WETH, 1 ether);
+        skyProtocol.deposit(mainnet.WETH, 1 ether);
     }
 
     function test_GetStakedBalance_ZeroBeforeStake() public view {
@@ -85,7 +85,7 @@ contract TestSkyV1ProtocolFork is Test {
     function test_GetStakedBalance_AfterStake() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
         usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
-        skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
+        skyProtocol.deposit(mainnet.USDC, STAKE_AMOUNT);
         uint256 balance = skyProtocol.getStakedBalance(mainnet.USDC);
         assertGt(balance, 0);
         assertApproxEqAbs(balance, STAKE_AMOUNT, STAKE_AMOUNT / 100);
@@ -99,7 +99,7 @@ contract TestSkyV1ProtocolFork is Test {
     function test_Unstake() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
         usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
-        skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
+        skyProtocol.deposit(mainnet.USDC, STAKE_AMOUNT);
 
         IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
         uint256 stakedBalance = skyProtocol.getStakedBalance(mainnet.USDC);
@@ -115,7 +115,7 @@ contract TestSkyV1ProtocolFork is Test {
     function test_Unstake_UsesMaxApproval() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
         usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
-        skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
+        skyProtocol.deposit(mainnet.USDC, STAKE_AMOUNT);
 
         IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
         uint256 stakedBalance = skyProtocol.getStakedBalance(mainnet.USDC);
@@ -127,7 +127,7 @@ contract TestSkyV1ProtocolFork is Test {
     function test_UnstakeMax_FullExit() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
         usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
-        skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
+        skyProtocol.deposit(mainnet.USDC, STAKE_AMOUNT);
 
         IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
         uint256 usdcBefore = usdc.balanceOf(address(this));
@@ -140,7 +140,7 @@ contract TestSkyV1ProtocolFork is Test {
     function test_UnstakeMax_FullExit_WithTout() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
         usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
-        skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
+        skyProtocol.deposit(mainnet.USDC, STAKE_AMOUNT);
 
         IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
         vm.mockCall(mainnet.SKY_PSM, abi.encodeWithSelector(IDssPsm.tout.selector), abi.encode(uint256(1e15)));
@@ -170,7 +170,7 @@ contract TestSkyV1ProtocolFork is Test {
     function test_StakeUnstakeRoundTrip_YieldAccrues() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
         usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
-        skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
+        skyProtocol.deposit(mainnet.USDC, STAKE_AMOUNT);
 
         vm.warp(block.timestamp + 365 days);
 
@@ -181,7 +181,7 @@ contract TestSkyV1ProtocolFork is Test {
     function test_Unstake_DeliversFullAmountNoYieldFee() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
         usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
-        skyProtocol.stake(mainnet.USDC, STAKE_AMOUNT);
+        skyProtocol.deposit(mainnet.USDC, STAKE_AMOUNT);
 
         vm.warp(block.timestamp + 365 days);
 

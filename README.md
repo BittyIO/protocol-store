@@ -8,7 +8,7 @@ Adapters are **curated** — only addresses registered in the Bitty Guard may be
 
 | Adapter | Category | Underlying | Chains |
 |---|---|---|---|
-| `AaveV3Protocol` | Lending | Aave V3 supply / withdraw | Mainnet, Sepolia, Base |
+| `AaveV3Protocol` | Lending | Aave V3 deposit / withdraw | Mainnet, Sepolia, Base |
 | `LidoV2Protocol` | Staking | WETH → stETH, async withdrawal queue | Mainnet, Sepolia |
 | `SkyV1Protocol` | Staking | USDC → sUSDS via Sky PSM + ERC-4626 vault | Mainnet |
 | `SkyV1EvmProtocol` | Staking | USDC → sUSDS via PSM3 (single-hop) | Base |
@@ -136,19 +136,30 @@ registering an adapter under the wrong number makes it unusable rather than mere
 These replace the ERC-165 interface IDs the guard used to probe for. Adapters no longer implement
 `IERC165`, and the pinned-ID tests that guarded the old scheme are gone with it.
 
-## Withdrawing
+## Entering and exiting a position
 
-Lending and staking both extend `IBittyV1Withdrawable`:
+Lending and staking extend the same two interfaces, because the vault does the same two things with
+each — put an asset in, take an asset out:
 
 ```solidity
+// IBittyV1Depositable
+function deposit(address asset, uint256 amount) external;
+
+// IBittyV1Withdrawable
 function withdraw(address asset, uint256 amount, address recipient) external returns (uint256 delivered);
 ```
 
-One name for both, because the vault does the same thing with each: take an asset out of a position.
-Staking's `unstake` was the same call under another name, which meant the vault needed a branch per
-category to ask the same question. `recipient` is normally the vault, or a payee to settle straight
-out of a position in one step — asynchronous protocols (Lido) only support the vault itself and
-revert otherwise, since there is nothing to deliver yet.
+One name per direction. Lending's `supply`/`withdraw` and staking's `stake`/`unstake` were the same
+two calls under four names, which forced the vault to branch by category to ask the same question.
+
+`deposit` is **not** payable. Assets reach an adapter as ERC-20 transfers — native ETH is wrapped by
+the vault before it gets there — so no adapter has ever read `msg.value` and the vault has never
+attached any. Accepting value would only create a way for ETH to strand in an adapter with no path
+back out.
+
+On `withdraw`, `recipient` is normally the vault, or a payee to settle straight out of a position in
+one step — asynchronous protocols (Lido) only support the vault itself and revert otherwise, since
+there is nothing to deliver yet.
 
 ## Related repos
 

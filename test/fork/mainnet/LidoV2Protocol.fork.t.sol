@@ -78,7 +78,7 @@ contract TestLidoProtocolFork is Test {
         weth.approve(address(lidoProtocol), stakeAmount);
 
         uint256 balanceBefore = stETH.balanceOf(address(this));
-        lidoProtocol.stake(address(weth), stakeAmount);
+        lidoProtocol.deposit(address(weth), stakeAmount);
         uint256 balanceAfter = stETH.balanceOf(address(this));
         assertGt(balanceAfter, balanceBefore);
         assertApproxEqAbs(balanceAfter - balanceBefore, stakeAmount, 10);
@@ -89,14 +89,14 @@ contract TestLidoProtocolFork is Test {
         deal(address(weth), address(this), stakeAmount);
         weth.approve(address(lidoProtocol), stakeAmount);
         vm.expectRevert(WETHBalanceNotEnough.selector);
-        lidoProtocol.stake(address(weth), stakeAmount + 1 ether);
+        lidoProtocol.deposit(address(weth), stakeAmount + 1 ether);
     }
 
     function test_Unstake_UsesMaxApproval() public {
         uint256 stakeAmount = 1 ether;
         deal(address(weth), address(this), stakeAmount);
         weth.approve(address(lidoProtocol), stakeAmount);
-        lidoProtocol.stake(address(weth), stakeAmount);
+        lidoProtocol.deposit(address(weth), stakeAmount);
 
         uint256 unstakeAmount = stETH.balanceOf(address(this));
         IERC20(address(stETH)).approve(address(lidoProtocol), unstakeAmount);
@@ -110,7 +110,7 @@ contract TestLidoProtocolFork is Test {
         uint256 stakeAmount = 1 ether;
         deal(address(weth), address(this), stakeAmount);
         weth.approve(address(lidoProtocol), stakeAmount);
-        lidoProtocol.stake(address(weth), stakeAmount);
+        lidoProtocol.deposit(address(weth), stakeAmount);
 
         IERC20(address(stETH)).approve(address(lidoProtocol), type(uint256).max);
         lidoProtocol.withdraw(address(weth), type(uint256).max, address(this));
@@ -127,7 +127,7 @@ contract TestLidoProtocolFork is Test {
 
         deal(address(weth), address(this), claimAmount);
         weth.approve(address(protocol), claimAmount);
-        protocol.stake(address(weth), claimAmount);
+        protocol.deposit(address(weth), claimAmount);
 
         uint256 wethBefore = weth.balanceOf(address(this));
 
@@ -154,7 +154,7 @@ contract TestLidoProtocolFork is Test {
 
         deal(address(weth), address(this), totalEth);
         weth.approve(address(protocol), totalEth);
-        protocol.stake(address(weth), totalEth);
+        protocol.deposit(address(weth), totalEth);
 
         uint256 wethBefore = weth.balanceOf(address(this));
 
@@ -182,7 +182,7 @@ contract TestLidoProtocolFork is Test {
 
         deal(address(weth), address(this), principal);
         weth.approve(address(protocol), principal);
-        protocol.stake(address(weth), principal);
+        protocol.deposit(address(weth), principal);
 
         uint256 wethBefore = weth.balanceOf(address(this));
         uint256 feeRecipientBefore = weth.balanceOf(0x12EE2de7BF086388B1D560eb95e7191Edfab9823);
@@ -209,7 +209,7 @@ contract TestLidoProtocolFork is Test {
         uint256 totalStake = amountPerRequest * numRequests * 2;
         deal(address(weth), address(this), totalStake);
         weth.approve(address(lidoProtocol), totalStake);
-        lidoProtocol.stake(address(weth), totalStake);
+        lidoProtocol.deposit(address(weth), totalStake);
 
         IERC20(address(stETH)).approve(address(lidoProtocol), type(uint256).max);
         for (uint256 i = 0; i < numRequests; i++) {

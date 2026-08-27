@@ -42,7 +42,7 @@ contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
 
     receive() external payable {}
 
-    function stake(address asset, uint256 amount) external payable override onlyOwner {
+    function deposit(address asset, uint256 amount) external override onlyOwner {
         if (asset != address(weth)) {
             revert InvalidAsset();
         }
