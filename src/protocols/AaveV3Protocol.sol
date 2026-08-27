@@ -2,7 +2,6 @@
 pragma solidity ^0.8.34;
 
 import {IBittyV1LendingProtocol} from "../interfaces/IBittyV1LendingProtocol.sol";
-import {IERC165} from "openzeppelin-contracts/contracts/utils/introspection/IERC165.sol";
 import {IAaveV3, IAavePool, IPoolDataProvider} from "../libs/aave/v3/Aave.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -59,17 +58,6 @@ contract AaveV3Protocol is IBittyV1LendingProtocol, Ownable, Initializable {
         }
     }
 
-    /**
-     * @notice Withdraw supplied asset and deliver it to `recipient`.
-     * @dev Aave settles synchronously, so the withdrawn asset is delivered to `recipient` in the same
-     * transaction. The aToken is always pulled from `owner()` (the vault, via msg.sender); only the
-     * underlying asset is routed to `recipient`. Pass the vault as `recipient` for a normal withdrawal,
-     * or a receiver to pay it straight out of the supplied position.
-     * @param asset The address of the asset.
-     * @param amount The amount to withdraw.
-     * @param recipient The address that receives the withdrawn asset.
-     * @return delivered The amount of `asset` delivered to `recipient`.
-     */
     function withdraw(address asset, uint256 amount, address recipient)
         external
         override
@@ -89,15 +77,5 @@ contract AaveV3Protocol is IBittyV1LendingProtocol, Ownable, Initializable {
     function getSuppliedBalance(address asset) external view override returns (uint256) {
         (uint256 currentATokenBalance,,,,,,,,) = IPoolDataProvider(poolDataProvider).getUserReserveData(asset, owner());
         return currentATokenBalance;
-    }
-
-    /**
-     * @notice Declares this adapter's CATEGORY, so callers need not keep a set per kind.
-     * @dev The vault asks this instead of consulting four separate allow-lists; the guard verifies it
-     *      once at registration, so a wrong answer is caught when the protocol is listed rather than
-     *      on every call that depends on it.
-     */
-    function supportsInterface(bytes4 interfaceId) public pure virtual returns (bool) {
-        return interfaceId == type(IBittyV1LendingProtocol).interfaceId || interfaceId == type(IERC165).interfaceId;
     }
 }

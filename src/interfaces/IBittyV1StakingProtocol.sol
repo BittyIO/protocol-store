@@ -2,6 +2,7 @@
 pragma solidity ^0.8.34;
 
 import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
+import {IBittyV1Withdrawable} from "./IBittyV1Withdrawable.sol";
 
 error UnstakeMoreThanStaked();
 error InvalidAsset();
@@ -13,7 +14,7 @@ error UnstakeToNotSupported();
  * @notice Interface for staking protocols.
  * @dev This interface is used to stake and unstake the asset.
  */
-interface IBittyV1StakingProtocol is IBittyV1Protocol {
+interface IBittyV1StakingProtocol is IBittyV1Protocol, IBittyV1Withdrawable {
     /**
      * @notice Stake the asset to the staking protocol.
      * @dev Stake the asset to the staking protocol.
@@ -29,19 +30,6 @@ interface IBittyV1StakingProtocol is IBittyV1Protocol {
      * @return The staking balance.
      */
     function getStakedBalance(address asset) external view returns (uint256);
-
-    /**
-     * @notice Unstake the asset from the staking protocol, delivered to `recipient`.
-     * @dev Pass the vault as `recipient` for a normal unstake, or a receiver to pay it straight out of a
-     * staked position in a single step. Delivering to a non-vault recipient is only supported by
-     * protocols that settle synchronously; asynchronous ones (Lido) revert with {UnstakeToNotSupported}
-     * unless `recipient` is the vault itself.
-     * @param asset The address of the asset.
-     * @param amount The amount of the asset to unstake.
-     * @param recipient The address that receives the unstaked asset.
-     * @return delivered The amount of `asset` delivered to `recipient` (0 for asynchronous protocols).
-     */
-    function unstake(address asset, uint256 amount, address recipient) external returns (uint256 delivered);
 
     /**
      * @notice Get the unstake request ids.

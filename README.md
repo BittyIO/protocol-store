@@ -2,7 +2,7 @@
 
 Solidity adapters that connect [Bitty Vault](https://github.com/bitty-ecosystem) to external DeFi protocols. Each adapter is a **cloneable implementation**: the vault deploys a minimal proxy per strategy, calls `initialize(vault)`, and routes asset-manager actions through a small, typed interface.
 
-Adapters are **curated** — only addresses registered in the Bitty Guard may be used. Each adapter declares its category (lending, staking, AMM, or intent) via ERC-165 so the vault and guard stay in sync without maintaining four parallel allow-lists.
+Adapters are **curated** — only addresses registered in the Bitty Guard may be used. An adapter does **not** declare its own category. Whoever registers it tells the guard which category it is, and consumers read that back from `protocolCategory`; curation and classification are the same act by the same party, so an adapter is never asked to describe itself.
 
 ## Protocol adapters
 
@@ -11,7 +11,7 @@ Adapters are **curated** — only addresses registered in the Bitty Guard may be
 | `AaveV3Protocol` | Lending | Aave V3 supply / withdraw | Mainnet, Sepolia, Base |
 | `LidoV2Protocol` | Staking | WETH → stETH, async withdrawal queue | Mainnet, Sepolia |
 | `SkyV1Protocol` | Staking | USDC → sUSDS via Sky PSM + ERC-4626 vault | Mainnet |
-| `SkyV1BaseProtocol` | Staking | USDC → sUSDS via PSM3 (single-hop) | Base |
+| `SkyV1EvmProtocol` | Staking | USDC → sUSDS via PSM3 (single-hop) | Base |
 | `UniswapV3Protocol` | AMM | Uniswap V3 LP (mint, decrease, remove, fee claim) | Mainnet, Sepolia, Base |
 | `CoWSwapV1Protocol` | Intent | CoW Swap off-chain orders (ERC-1271 validation) | Mainnet, Sepolia, Base |
 
@@ -57,8 +57,6 @@ deployments/
 test/
   fork/                # Integration tests against live chain state
   local/               # Unit tests (CoW off-chain auth, etc.)
-  InterfaceIds.t.sol   # Pinned ERC-165 interface IDs (cross-repo contract)
-  Erc165Conformance.t.sol
 ```
 
 ## Requirements
@@ -122,18 +120,35 @@ Chain-specific external protocol addresses and deployed adapter addresses are st
 
 After deploying, register each new adapter address in the **Bitty Guard** and deprecate any superseded ones.
 
-## Interface IDs
+## Categories
 
-Category interface selectors are **pinned** in `test/InterfaceIds.t.sol`. The guard checks one ID at registration; the vault checks it on every call. Changing an interface without redeploying all adapters in that category would silently disable them — the pinned test turns that into a build failure.
+A category is a `uint8` the guard stores at registration. It is not derived from the adapter and not
+verified on chain, so the numbering is a convention this repo shares with the vault and the guard —
+registering an adapter under the wrong number makes it unusable rather than merely mislabelled.
 
-| Category | Interface | ID |
+| Category | Interface | Value |
 |---|---|---|
-| Lending | `IBittyV1LendingProtocol` | `0xb9f16a0c` |
-| Staking | `IBittyV1StakingProtocol` | `0xc8ada217` |
-| AMM | `IBittyV1AMMProtocol` | `0x932722bd` |
-| Intent | `IBittyV1IntentProtocol` | `0x1626ba7e` |
+| Lending | `IBittyV1LendingProtocol` | `1` |
+| Staking | `IBittyV1StakingProtocol` | `2` |
+| AMM | `IBittyV1AMMProtocol` | `3` |
+| Intent | `IBittyV1IntentProtocol` | `4` |
 
-`Erc165Conformance.t.sol` verifies every adapter answers its category probe the way OpenZeppelin's `ERC165Checker` expects.
+These replace the ERC-165 interface IDs the guard used to probe for. Adapters no longer implement
+`IERC165`, and the pinned-ID tests that guarded the old scheme are gone with it.
+
+## Withdrawing
+
+Lending and staking both extend `IBittyV1Withdrawable`:
+
+```solidity
+function withdraw(address asset, uint256 amount, address recipient) external returns (uint256 delivered);
+```
+
+One name for both, because the vault does the same thing with each: take an asset out of a position.
+Staking's `unstake` was the same call under another name, which meant the vault needed a branch per
+category to ask the same question. `recipient` is normally the vault, or a payee to settle straight
+out of a position in one step — asynchronous protocols (Lido) only support the vault itself and
+revert otherwise, since there is nothing to deliver yet.
 
 ## Related repos
 

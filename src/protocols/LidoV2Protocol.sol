@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IERC165} from "openzeppelin-contracts/contracts/utils/introspection/IERC165.sol";
 import {IBittyV1StakingProtocol, InvalidAsset, UnstakeToNotSupported} from "../interfaces/IBittyV1StakingProtocol.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
@@ -64,12 +63,6 @@ contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         }
     }
 
-    /**
-     * @notice Get the staking balance of the WETH.
-     * @dev Get the staking balance of the WETH.
-     * @param asset The address of the WETH.
-     * @return The staking balance of the WETH query from stETH.
-     */
     function getStakedBalance(address asset) external view override returns (uint256) {
         if (asset != address(weth)) {
             revert InvalidAsset();
@@ -81,14 +74,7 @@ contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         return _unstakeRequests.values();
     }
 
-    /**
-     * @notice Begin unstaking. Lido withdrawals settle asynchronously via a queue, so the asset
-     * cannot be delivered to a receiver in the same transaction — `recipient` must therefore be the
-     * vault itself (the owner). On-behalf delivery to any other address reverts with
-     * {UnstakeToNotSupported}; use {unstake} then {claimUnstaked}.
-     * @return delivered Always 0 — nothing is delivered synchronously (settlement is queued).
-     */
-    function unstake(address asset, uint256 amount, address recipient)
+    function withdraw(address asset, uint256 amount, address recipient)
         external
         override
         onlyOwner
@@ -130,15 +116,5 @@ contract LidoV2Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
             weth.deposit{value: ethClaimed}();
             IERC20(address(weth)).safeTransfer(msg.sender, ethClaimed);
         }
-    }
-
-    /**
-     * @notice Declares this adapter's CATEGORY, so callers need not keep a set per kind.
-     * @dev The vault asks this instead of consulting four separate allow-lists; the guard verifies it
-     *      once at registration, so a wrong answer is caught when the protocol is listed rather than
-     *      on every call that depends on it.
-     */
-    function supportsInterface(bytes4 interfaceId) public pure virtual returns (bool) {
-        return interfaceId == type(IBittyV1StakingProtocol).interfaceId || interfaceId == type(IERC165).interfaceId;
     }
 }

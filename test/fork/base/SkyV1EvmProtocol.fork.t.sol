@@ -2,19 +2,19 @@
 pragma solidity ^0.8.34;
 
 import {Test} from "forge-std/Test.sol";
-import {SkyV1BaseProtocol, PsmAssetMismatch} from "protocol-contracts/src/protocols/SkyV1BaseProtocol.sol";
+import {SkyV1EvmProtocol, PsmAssetMismatch} from "protocol-contracts/src/protocols/SkyV1EvmProtocol.sol";
 import {IPsm3} from "protocol-contracts/src/libs/sky/Psm3.sol";
 import {base} from "../../../script/addresses.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {InvalidAsset, ClaimUnstakedNotSupported} from "protocol-contracts/src/interfaces/IBittyV1StakingProtocol.sol";
 
-contract TestSkyV1BaseProtocolFork is Test {
+contract TestSkyV1EvmProtocolFork is Test {
     using SafeERC20 for IERC20;
 
     uint256 internal constant STAKE_AMOUNT = 1000e6;
 
-    SkyV1BaseProtocol public sky;
+    SkyV1EvmProtocol public sky;
     IERC20 public usdc;
     IERC20 public sUsds;
     IPsm3 public psm;
@@ -26,7 +26,7 @@ contract TestSkyV1BaseProtocolFork is Test {
         sUsds = IERC20(base.S_USDS);
         psm = IPsm3(base.SKY_PSM3);
 
-        sky = new SkyV1BaseProtocol(base.USDC, base.S_USDS, base.SKY_PSM3);
+        sky = new SkyV1EvmProtocol(base.USDC, base.S_USDS, base.SKY_PSM3);
         sky.initialize(address(this));
     }
 
@@ -41,7 +41,7 @@ contract TestSkyV1BaseProtocolFork is Test {
     ///      deployed at all rather than failing mid-swap with the vault's USDC already gone.
     function test_Constructor_RevertsOnAssetMismatch() public {
         vm.expectRevert(PsmAssetMismatch.selector);
-        new SkyV1BaseProtocol(base.USDT, base.S_USDS, base.SKY_PSM3);
+        new SkyV1EvmProtocol(base.USDT, base.S_USDS, base.SKY_PSM3);
     }
 
     /// @dev sUSDS on Base is a plain ERC-20 — this is why the mainnet adapter cannot serve it.
@@ -85,7 +85,7 @@ contract TestSkyV1BaseProtocolFork is Test {
         uint256 want = 400e6;
         sUsds.forceApprove(address(sky), type(uint256).max);
 
-        uint256 delivered = sky.unstake(base.USDC, want, recipient);
+        uint256 delivered = sky.withdraw(base.USDC, want, recipient);
 
         assertEq(delivered, want, "reported delivery differs from request");
         assertEq(usdc.balanceOf(recipient), want, "recipient did not receive exactly the request");
@@ -101,7 +101,7 @@ contract TestSkyV1BaseProtocolFork is Test {
         address recipient = makeAddr("recipient");
         sUsds.forceApprove(address(sky), type(uint256).max);
 
-        uint256 delivered = sky.unstake(base.USDC, type(uint256).max, recipient);
+        uint256 delivered = sky.withdraw(base.USDC, type(uint256).max, recipient);
 
         assertApproxEqAbs(delivered, STAKE_AMOUNT, 2, "max unstake did not return the stake");
         assertEq(usdc.balanceOf(recipient), delivered);
@@ -110,7 +110,7 @@ contract TestSkyV1BaseProtocolFork is Test {
     }
 
     function test_Unstake_Max_OnEmptyPositionIsZero() public {
-        assertEq(sky.unstake(base.USDC, type(uint256).max, makeAddr("r")), 0);
+        assertEq(sky.withdraw(base.USDC, type(uint256).max, makeAddr("r")), 0);
     }
 
     function test_RevertsOnWrongAsset() public {
@@ -121,7 +121,7 @@ contract TestSkyV1BaseProtocolFork is Test {
         sky.stake(base.USDT, 1e6);
 
         vm.expectRevert(InvalidAsset.selector);
-        sky.unstake(base.USDT, 1e6, address(this));
+        sky.withdraw(base.USDT, 1e6, address(this));
     }
 
     function test_NoWithdrawalQueue() public {

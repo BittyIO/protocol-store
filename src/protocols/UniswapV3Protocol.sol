@@ -2,7 +2,6 @@
 pragma solidity ^0.8.34;
 
 import {IBittyV1AMMProtocol} from "../interfaces/IBittyV1AMMProtocol.sol";
-import {IERC165} from "openzeppelin-contracts/contracts/utils/introspection/IERC165.sol";
 import {INonfungiblePositionManager} from "../libs/uniswap/v3/Uniswap.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IERC721} from "openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
@@ -211,15 +210,5 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
             }
             IERC20(token1).safeTransfer(msg.sender, amount1 - fee1);
         }
-    }
-
-    /**
-     * @notice Declares this adapter's CATEGORY, so callers need not keep a set per kind.
-     * @dev The vault asks this instead of consulting four separate allow-lists; the guard verifies it
-     *      once at registration, so a wrong answer is caught when the protocol is listed rather than
-     *      on every call that depends on it.
-     */
-    function supportsInterface(bytes4 interfaceId) public pure virtual returns (bool) {
-        return interfaceId == type(IBittyV1AMMProtocol).interfaceId || interfaceId == type(IERC165).interfaceId;
     }
 }

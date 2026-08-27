@@ -11,7 +11,7 @@ pragma solidity ^0.8.34;
  *      Base's sUSDS is only an ERC-20 — asset(), convertToAssets(), previewWithdraw() and
  *      totalAssets() all revert on it — so there is no vault to deposit into and this module is the
  *      only way in or out. That, not the PSM difference alone, is why {SkyV1Protocol} cannot serve
- *      Base and {SkyV1BaseProtocol} exists.
+ *      Base and {SkyV1EvmProtocol} exists.
  *
  *      Despite the name these are conversions, not trades: measured on Base, a USDC → sUSDS → USDC
  *      round trip returns the input to within one unit of the smallest denomination at 100, 10 000

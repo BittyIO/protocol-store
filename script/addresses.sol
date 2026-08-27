@@ -29,7 +29,7 @@ library mainnet {
     address public constant COW_SETTLEMENT = 0x9008D19f58AAbD9eD0D60971565AA8510560ab41;
     address public constant COW_VAULT_RELAYER = 0xC92E8bdf79f0507f65a392b0ab4667716BFE0110;
 
-    address public constant BITTY_GUARD = 0x00000000a63B8e2F5B96e3631953667A94e651dd;
+    address public constant BITTY_GUARD = 0x000fA27430cb0FE8e8000038003897926f003f00;
 }
 
 /// @dev Sepolia addresses parallel to `mainnet` for fork tests on Sepolia.
@@ -57,7 +57,7 @@ library sepolia {
     address public constant COW_SETTLEMENT = 0x9008D19f58AAbD9eD0D60971565AA8510560ab41;
     address public constant COW_VAULT_RELAYER = 0xC92E8bdf79f0507f65a392b0ab4667716BFE0110;
 
-    address public constant BITTY_GUARD = 0x00000000a63B8e2F5B96e3631953667A94e651dd;
+    address public constant BITTY_GUARD = 0x000fA27430cb0FE8e8000038003897926f003f00;
 }
 
 /// @dev Base (chain 8453) addresses used by fork tests in `test/fork/base/`.

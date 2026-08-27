@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IERC165} from "openzeppelin-contracts/contracts/utils/introspection/IERC165.sol";
 import {
     IBittyV1StakingProtocol,
     InvalidAsset,
@@ -16,7 +15,7 @@ import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initia
 error PsmAssetMismatch();
 
 /**
- * @title SkyV1BaseProtocol
+ * @title SkyV1EvmProtocol
  * @notice Sky (sUSDS) yield on Base, where the protocol is a single PSM3 module rather than
  *         mainnet's PSM + ERC-4626 vault pair.
  *
@@ -32,7 +31,7 @@ error PsmAssetMismatch();
  *      As with {SkyV1Protocol}, the receipt token (sUSDS) is held by the VAULT, not by this adapter:
  *      the adapter is a stateless router and holds nothing between calls.
  */
-contract SkyV1BaseProtocol is IBittyV1StakingProtocol, Ownable, Initializable {
+contract SkyV1EvmProtocol is IBittyV1StakingProtocol, Ownable, Initializable {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable usdc;
@@ -49,11 +48,6 @@ contract SkyV1BaseProtocol is IBittyV1StakingProtocol, Ownable, Initializable {
         return "1.0.0";
     }
 
-    /**
-     * @dev The module is asked to confirm its own assets. A PSM3 pointed at different tokens would
-     *      otherwise fail deep inside a swap, after the vault had already parted with its USDC;
-     *      here a misconfigured deployment cannot be constructed at all.
-     */
     constructor(address usdc_, address sUsds_, address psm_) Ownable(msg.sender) {
         if (IPsm3(psm_).usdc() != usdc_ || IPsm3(psm_).susds() != sUsds_) revert PsmAssetMismatch();
         usdc = IERC20(usdc_);
@@ -65,13 +59,6 @@ contract SkyV1BaseProtocol is IBittyV1StakingProtocol, Ownable, Initializable {
         _transferOwnership(newOwner);
     }
 
-    /**
-     * @notice Stake USDC: converts USDC directly into sUSDS through PSM3.
-     * @dev The sUSDS is delivered straight to the caller by the module — the adapter never holds it,
-     *      which removes the "sweep whatever balance is left" step the mainnet version needs.
-     * @param asset Must be the USDC address.
-     * @param amount Amount of USDC (6 decimals) to stake.
-     */
     function stake(address asset, uint256 amount) external payable override onlyOwner {
         if (asset != address(usdc)) revert InvalidAsset();
 
@@ -81,8 +68,6 @@ contract SkyV1BaseProtocol is IBittyV1StakingProtocol, Ownable, Initializable {
             usdc.forceApprove(address(psm), type(uint256).max);
         }
 
-        // Previewed in this same call, so it reads the state the swap will execute against: the
-        // bound is exact rather than a tolerance someone has to pick and later justify.
         uint256 minOut = psm.previewSwapExactIn(address(usdc), address(sUsds), amount);
         psm.swapExactIn(address(usdc), address(sUsds), amount, minOut, msg.sender, 0);
 
@@ -91,12 +76,6 @@ contract SkyV1BaseProtocol is IBittyV1StakingProtocol, Ownable, Initializable {
         }
     }
 
-    /**
-     * @notice The vault's staked position, valued in USDC (6 decimals).
-     * @dev Priced by the module, which is the only thing that can redeem it. Base's sUSDS exposes no
-     *      exchange rate of its own — convertToAssets() reverts — so there is nothing else to ask.
-     * @param asset Must be the USDC address.
-     */
     function getStakedBalance(address asset) external view override returns (uint256) {
         if (asset != address(usdc)) revert InvalidAsset();
         uint256 shares = sUsds.balanceOf(owner());
@@ -104,19 +83,7 @@ contract SkyV1BaseProtocol is IBittyV1StakingProtocol, Ownable, Initializable {
         return psm.previewSwapExactIn(address(sUsds), address(usdc), shares);
     }
 
-    /**
-     * @notice Unstake and deliver the redeemed USDC to `recipient`.
-     * @dev Two paths, matching {SkyV1Protocol}'s contract with its callers: an exact USDC amount, or
-     *      type(uint256).max to drain the whole position. The exact path previews the sUSDS required
-     *      and pulls precisely that, so no dust is left with the adapter and none has to be swept
-     *      back. The module delivers USDC to `recipient` directly, so paying a receiver straight out
-     *      of a staked position costs no extra transfer.
-     * @param asset Must be the USDC address.
-     * @param amount USDC (6 decimals) to unstake, or type(uint256).max for the whole position.
-     * @param recipient The address that receives the redeemed USDC.
-     * @return delivered The amount of USDC delivered to `recipient`.
-     */
-    function unstake(address asset, uint256 amount, address recipient)
+    function withdraw(address asset, uint256 amount, address recipient)
         external
         override
         onlyOwner
@@ -149,24 +116,11 @@ contract SkyV1BaseProtocol is IBittyV1StakingProtocol, Ownable, Initializable {
         }
     }
 
-    /**
-     * @notice PSM3 settles synchronously — there is no withdrawal queue.
-     */
     function getUnstakeRequestIds() external pure override returns (uint256[] memory) {
         return new uint256[](0);
     }
 
-    /**
-     * @notice No-op: PSM3 does not use a withdrawal queue.
-     */
     function claimUnstaked(uint256[] memory) external view override onlyOwner {
         revert ClaimUnstakedNotSupported();
-    }
-
-    /**
-     * @notice Declares this adapter's CATEGORY, so callers need not keep a set per kind.
-     */
-    function supportsInterface(bytes4 interfaceId) public pure virtual returns (bool) {
-        return interfaceId == type(IBittyV1StakingProtocol).interfaceId || interfaceId == type(IERC165).interfaceId;
     }
 }

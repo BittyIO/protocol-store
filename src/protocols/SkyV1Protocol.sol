@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {IERC165} from "openzeppelin-contracts/contracts/utils/introspection/IERC165.sol";
 import {
     IBittyV1StakingProtocol,
     InvalidAsset,
@@ -46,12 +45,6 @@ contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         _transferOwnership(newOwner);
     }
 
-    /**
-     * @notice Stake USDC: converts USDC → USDS via PSM, then deposits USDS into sUSDS.
-     * @dev Converts USDC → USDS via PSM, then deposits USDS into sUSDS.
-     * @param asset Must be the USDC address.
-     * @param amount Amount of USDC (6 decimals) to stake.
-     */
     function stake(address asset, uint256 amount) external payable override onlyOwner {
         if (asset != address(usdc)) revert InvalidAsset();
 
@@ -76,12 +69,6 @@ contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         }
     }
 
-    /**
-     * @notice Returns current staked balance in USDC terms (6 decimals).
-     * @dev Returns current staked balance in USDC terms (6 decimals).
-     * @param asset Must be the USDC address.
-     * @return The staked balance in USDC terms (6 decimals).
-     */
     function getStakedBalance(address asset) external view override returns (uint256) {
         if (asset != address(usdc)) revert InvalidAsset();
         uint256 shares = sUsds.balanceOf(owner());
@@ -90,19 +77,7 @@ contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         return usdsValue / GEM_CONVERSION_FACTOR;
     }
 
-    /**
-     * @notice Unstake the staked asset and deliver the redeemed USDC to `recipient`.
-     * @dev Redeems sUSDS → USDS, converts USDS → USDC via PSM. The sUSDS shares are always pulled
-     * from `owner()` (the vault, via msg.sender); only the resulting USDC is routed to `recipient`.
-     * Any USDS dust from rounding is returned to the vault. Sky settles synchronously, so the USDC is
-     * delivered to `recipient` in the same transaction. Pass the vault as `recipient` for a normal
-     * unstake, or a receiver to pay it straight out of the staked position.
-     * @param asset Must be the USDC address.
-     * @param amount Amount of USDC (6 decimals) to unstake.
-     * @param recipient The address that receives the redeemed USDC.
-     * @return delivered The amount of USDC delivered to `recipient`.
-     */
-    function unstake(address asset, uint256 amount, address recipient)
+    function withdraw(address asset, uint256 amount, address recipient)
         external
         override
         onlyOwner
@@ -155,30 +130,11 @@ contract SkyV1Protocol is IBittyV1StakingProtocol, Ownable, Initializable {
         return gross;
     }
 
-    /**
-     * @notice Sky Protocol (sUSDS) supports immediate withdrawal — no queued requests.
-     * @dev Sky Protocol (sUSDS) supports immediate withdrawal — no queued requests.
-     * @return The unstake request ids.
-     */
     function getUnstakeRequestIds() external pure override returns (uint256[] memory) {
         return new uint256[](0);
     }
 
-    /**
-     * @notice No-op: Sky Protocol does not use a withdrawal queue.
-     * @dev No-op: Sky Protocol does not use a withdrawal queue.
-     */
     function claimUnstaked(uint256[] memory) external view override onlyOwner {
         revert ClaimUnstakedNotSupported();
-    }
-
-    /**
-     * @notice Declares this adapter's CATEGORY, so callers need not keep a set per kind.
-     * @dev The vault asks this instead of consulting four separate allow-lists; the guard verifies it
-     *      once at registration, so a wrong answer is caught when the protocol is listed rather than
-     *      on every call that depends on it.
-     */
-    function supportsInterface(bytes4 interfaceId) public pure virtual returns (bool) {
-        return interfaceId == type(IBittyV1StakingProtocol).interfaceId || interfaceId == type(IERC165).interfaceId;
     }
 }

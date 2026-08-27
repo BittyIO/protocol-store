@@ -6,7 +6,7 @@ import {AaveV3Protocol} from "../src/protocols/AaveV3Protocol.sol";
 import {UniswapV3Protocol} from "../src/protocols/UniswapV3Protocol.sol";
 import {LidoV2Protocol} from "../src/protocols/LidoV2Protocol.sol";
 import {SkyV1Protocol} from "../src/protocols/SkyV1Protocol.sol";
-import {SkyV1BaseProtocol} from "../src/protocols/SkyV1BaseProtocol.sol";
+import {SkyV1EvmProtocol} from "../src/protocols/SkyV1EvmProtocol.sol";
 import {CoWSwapV1Protocol} from "../src/protocols/cowswap/CoWSwapV1Protocol.sol";
 import {DeployScript} from "./BaseDeploy.sol";
 
@@ -29,15 +29,19 @@ import {DeployScript} from "./BaseDeploy.sol";
  *      predict.
  */
 abstract contract DeployProtocols is DeployScript {
-    /// @dev Reuse only when something is actually deployed there. A TOML entry alone is not enough:
-    ///      a simulated run writes addresses that never existed on chain, and trusting one would
-    ///      register a phantom adapter in the guard.
+    /**
+     * @dev Reuse only when something is actually deployed there. A TOML entry alone is not enough:
+     *      a simulated run writes addresses that never existed on chain, and trusting one would
+     *      register a phantom adapter in the guard.
+     */
     function _existing(string memory key) private view returns (address) {
         address recorded = getAddressOr(key, address(0));
         return recorded.code.length > 0 ? recorded : address(0);
     }
 
-    /// @dev Returns the address to reuse, or zero when the caller should deploy.
+    /**
+     * @dev Returns the address to reuse, or zero when the caller should deploy.
+     */
     function _reuse(string memory name, string memory key) private returns (address) {
         address existing = _existing(key);
         if (existing == address(0)) return address(0);
@@ -87,7 +91,9 @@ abstract contract DeployProtocols is DeployScript {
         );
     }
 
-    /// @dev Mainnet's Sky: PSM (sellGem/buyGem) plus the sUSDS ERC-4626 vault.
+    /**
+     * @dev Mainnet's Sky: PSM (sellGem/buyGem) plus the sUSDS ERC-4626 vault.
+     */
     function _deploySky() internal {
         if (_reuse("SkyV1Protocol", "SKY_V1_PROTOCOL") != address(0)) return;
         _record(
@@ -99,14 +105,16 @@ abstract contract DeployProtocols is DeployScript {
         );
     }
 
-    /// @dev Base's Sky: one PSM3 module. Base's sUSDS is a plain ERC-20 with no vault to deposit
-    ///      into, so the mainnet adapter cannot serve it — see {SkyV1BaseProtocol}.
-    function _deploySkyBase() internal {
-        if (_reuse("SkyV1BaseProtocol", "SKY_V1_PROTOCOL") != address(0)) return;
+    /**
+     * @dev Evm's Sky: one PSM3 module. Evm's sUSDS is a plain ERC-20 with no vault to deposit
+     *     into, so the evm adapter cannot serve it — see {SkyV1EvmProtocol}.
+     */
+    function _deploySkyEvm() internal {
+        if (_reuse("SkyV1EvmProtocol", "SKY_V1_PROTOCOL") != address(0)) return;
         _record(
-            "SkyV1BaseProtocol",
+            "SkyV1EvmProtocol",
             "SKY_V1_PROTOCOL",
-            address(new SkyV1BaseProtocol(getAddress("USDC"), getAddress("S_USDS"), getAddress("SKY_PSM3")))
+            address(new SkyV1EvmProtocol(getAddress("USDC"), getAddress("S_USDS"), getAddress("SKY_PSM3")))
         );
     }
 }
