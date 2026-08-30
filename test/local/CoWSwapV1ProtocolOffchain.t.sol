@@ -16,13 +16,13 @@ contract MockSettlement {
 }
 
 // Stands in for the vault: owns the clone and answers the off-chain auth callback. A single
-// full-access manager is authorized; every other signer is rejected.
+// authorized signer is accepted; every other signer is rejected.
 contract MockVaultAuth is IBittyVaultOffchainAuth {
-    address public manager;
+    address public authorizedSigner;
     address public allowedBuyToken;
 
-    constructor(address manager_, address allowedBuyToken_) {
-        manager = manager_;
+    constructor(address authorizedSigner_, address allowedBuyToken_) {
+        authorizedSigner = authorizedSigner_;
         allowedBuyToken = allowedBuyToken_;
     }
 
@@ -31,11 +31,11 @@ contract MockVaultAuth is IBittyVaultOffchainAuth {
         view
         returns (bool)
     {
-        return signer == manager && buyToken == allowedBuyToken;
+        return signer == authorizedSigner && buyToken == allowedBuyToken;
     }
 
-    function isOffchainManager(address signer) external view returns (bool) {
-        return signer == manager;
+    function isOffchainCancellationAuthorized(address signer) external view returns (bool) {
+        return signer == authorizedSigner;
     }
 }
 

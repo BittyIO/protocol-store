@@ -11,11 +11,11 @@ import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 // Stands in for the vault (owns the clone, answers the off-chain auth callback).
 contract MockVaultAuth is IBittyVaultOffchainAuth {
-    address public manager;
+    address public authorizedSigner;
     address public allowedBuyToken;
 
-    constructor(address manager_, address allowedBuyToken_) {
-        manager = manager_;
+    constructor(address authorizedSigner_, address allowedBuyToken_) {
+        authorizedSigner = authorizedSigner_;
         allowedBuyToken = allowedBuyToken_;
     }
 
@@ -24,11 +24,11 @@ contract MockVaultAuth is IBittyVaultOffchainAuth {
         view
         returns (bool)
     {
-        return signer == manager && buyToken == allowedBuyToken;
+        return signer == authorizedSigner && buyToken == allowedBuyToken;
     }
 
-    function isOffchainManager(address signer) external view returns (bool) {
-        return signer == manager;
+    function isOffchainCancellationAuthorized(address signer) external view returns (bool) {
+        return signer == authorizedSigner;
     }
 }
 

@@ -6,7 +6,7 @@ import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
 /**
  * @title IBittyV1IntentProtocol
  * @notice Generic interface for vault-custodian intent protocols (CoW Swap, etc.). Intent orders are
- *         gasless and off-chain: the asset manager signs an order off-chain and posts it to the
+ *         gasless and off-chain: a host-authorised signer signs an order off-chain and posts it to the
  *         protocol's orderbook. The vault is the ERC-1271 signer and token custodian; it holds no
  *         on-chain order registry.
  *
