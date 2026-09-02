@@ -6,6 +6,8 @@ import {CoWSwapV1Protocol} from "../../src/protocols/cowswap/CoWSwapV1Protocol.s
 import {IBittyVaultOffchainAuth} from "../../src/interfaces/IBittyVaultOffchainAuth.sol";
 import {GPv2Order} from "../../src/libs/cow/GPv2Order.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {ERC1967Proxy} from "openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {BittyV1ProtocolBase} from "../../src/BittyV1ProtocolBase.sol";
 
 contract MockSettlement {
     bytes32 public immutable domainSeparator = keccak256("bitty-test-cow-domain");
@@ -55,8 +57,12 @@ contract CoWSwapV1ProtocolOffchainTest is Test {
         manager = vm.addr(managerPk);
         settlement = new MockSettlement();
         vault = new MockVaultAuth(manager, BUY);
-        cow = new CoWSwapV1Protocol(address(settlement), RELAYER);
-        cow.initialize(address(vault)); // owner() == vault
+        cow = CoWSwapV1Protocol(
+            payable(new ERC1967Proxy(
+                    address(new CoWSwapV1Protocol(address(settlement), RELAYER)),
+                    abi.encodeCall(BittyV1ProtocolBase.initialize, (address(vault)))
+                ))
+        ); // owner() == vault
         vm.warp(1_000_000);
     }
 

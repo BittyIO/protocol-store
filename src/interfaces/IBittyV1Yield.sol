@@ -2,22 +2,32 @@
 pragma solidity ^0.8.34;
 
 error ClaimNotSupported();
-
-/// @dev The protocol can only return an asset to its owner, so it cannot pay a third party straight
-///      out of a position. Asynchronous exits are the usual case: at the point of the request there
-///      is nothing yet to deliver.
 error WithdrawToNotSupported();
 
 /**
- * @title IBittyV1Withdrawable
- * @notice Taking an asset back out of a protocol.
+ * @title IBittyV1Yield
+ * @notice Putting an asset to work in a protocol and taking it back out again.
  * @dev Deliberately says nothing about WHAT KIND of protocol it is. Lending and staking are different
- *      types - and there will be more - but a vault exiting a position asks the same things of all of
- *      them, so the type belongs in the guard's category, which is curation, and not in this
- *      interface, which is capability. Anything the vault needs in order to exit lives here, so the
- *      vault never has to ask what it is talking to.
+ *      types - and there will be more - but a vault entering or exiting a position asks the same
+ *      things of all of them, so the type belongs in the guard's category, which is curation, and not
+ *      in this interface, which is capability. Everything the vault needs lives here, so it never has
+ *      to ask what it is talking to.
+ * @dev Entering and exiting are ONE capability, not two. No adapter has ever taken an asset in
+ *      without also handing it back - a one-way adapter would be a trap, not a protocol - so
+ *      splitting the two only forced every caller to name which half it meant before it could ask.
  */
-interface IBittyV1Withdrawable {
+interface IBittyV1Yield {
+    /**
+     * @notice Deposit the asset into the protocol.
+     * @dev Not payable. Assets reach an adapter as ERC-20 transfers - native ETH is wrapped by the
+     *      vault before it gets here - so no adapter has ever read msg.value and the vault has never
+     *      attached any. Accepting value would only create a way for ETH to strand in an adapter with
+     *      no path back out.
+     * @param asset The address of the asset to deposit.
+     * @param amount The amount of the asset to deposit.
+     */
+    function deposit(address asset, uint256 amount) external;
+
     /**
      * @notice Withdraw the asset from the protocol, delivered to `recipient`.
      * @dev Pass the vault as `recipient` for a normal withdrawal, or a receiver to pay it straight out
@@ -43,7 +53,7 @@ interface IBittyV1Withdrawable {
     /**
      * @notice Withdrawals requested but not yet claimed.
      * @dev EMPTY for a protocol that settles synchronously, which is what makes this askable of any
-     *      withdrawable protocol rather than only of the asynchronous ones. A caller walks the ids and
+     *      yield protocol rather than only of the asynchronous ones. A caller walks the ids and
      *      claims what has finalised; getting nothing back means there is nothing outstanding.
      * @return uint256[] The outstanding withdrawal ids.
      */

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
+import {TestProxy} from "../../helpers/Proxy.sol";
 import {Test} from "forge-std/Test.sol";
 import {AaveV3Protocol} from "protocol-contracts/src/protocols/AaveV3Protocol.sol";
 import {sepolia} from "../../../script/addresses.sol";
@@ -16,8 +17,9 @@ contract TestAaveV3ProtocolSepoliaFork is Test {
 
     function setUp() public {
         vm.createSelectFork("sepolia");
-        aaveProtocol = new AaveV3Protocol(sepolia.AAVE_V3, sepolia.POOL_DATA_PROVIDER);
-        aaveProtocol.initialize(address(this));
+        aaveProtocol = AaveV3Protocol(
+            TestProxy.deploy(address(new AaveV3Protocol(sepolia.AAVE_V3, sepolia.POOL_DATA_PROVIDER)), address(this))
+        );
         poolDataProvider = IPoolDataProvider(sepolia.POOL_DATA_PROVIDER);
     }
 

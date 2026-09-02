@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
+import {TestProxy} from "../../helpers/Proxy.sol";
 import {Test} from "forge-std/Test.sol";
-import {ClaimNotSupported} from "protocol-contracts/src/interfaces/IBittyV1Withdrawable.sol";
+import {ClaimNotSupported} from "protocol-contracts/src/interfaces/IBittyV1Yield.sol";
 import {SkyV1EvmProtocol, PsmAssetMismatch} from "protocol-contracts/src/protocols/SkyV1EvmProtocol.sol";
 import {IPsm3} from "protocol-contracts/src/libs/sky/Psm3.sol";
 import {base} from "../../../script/addresses.sol";
@@ -27,8 +28,9 @@ contract TestSkyV1EvmProtocolFork is Test {
         sUsds = IERC20(base.S_USDS);
         psm = IPsm3(base.SKY_PSM3);
 
-        sky = new SkyV1EvmProtocol(base.USDC, base.S_USDS, base.SKY_PSM3);
-        sky.initialize(address(this));
+        sky = SkyV1EvmProtocol(
+            TestProxy.deploy(address(new SkyV1EvmProtocol(base.USDC, base.S_USDS, base.SKY_PSM3)), address(this))
+        );
     }
 
     function test_Initialize() public view {

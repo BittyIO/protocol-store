@@ -142,10 +142,10 @@ Lending and staking extend the same two interfaces, because the vault does the s
 each — put an asset in, take an asset out:
 
 ```solidity
-// IBittyV1Depositable
+// IBittyV1Yield
 function deposit(address asset, uint256 amount) external;
 
-// IBittyV1Withdrawable
+// IBittyV1Yield
 function withdraw(address asset, uint256 amount, address recipient) external returns (uint256 delivered);
 ```
 

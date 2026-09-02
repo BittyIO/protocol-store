@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
+import {TestProxy} from "../../helpers/Proxy.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {UniswapV3Protocol} from "protocol-contracts/src/protocols/UniswapV3Protocol.sol";
@@ -36,8 +37,11 @@ contract TestUniswapProtocolFork is Test {
     function setUp() public {
         vm.createSelectFork("mainnet");
 
-        v3Protocol = new UniswapV3Protocol(mainnet.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER);
-        v3Protocol.initialize(address(this));
+        v3Protocol = UniswapV3Protocol(
+            payable(TestProxy.deploy(
+                    address(new UniswapV3Protocol(mainnet.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER)), address(this)
+                ))
+        );
         vm.deal(address(v3Protocol), 0);
         IERC721(mainnet.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER).setApprovalForAll(address(v3Protocol), true);
     }

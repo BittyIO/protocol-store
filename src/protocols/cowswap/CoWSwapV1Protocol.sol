@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
+import {BittyV1ProtocolBase} from "../../BittyV1ProtocolBase.sol";
 import {IBittyV1IntentProtocol} from "../../interfaces/IBittyV1IntentProtocol.sol";
 import {IBittyVaultOffchainAuth} from "../../interfaces/IBittyVaultOffchainAuth.sol";
 import {IGPv2Settlement} from "../../libs/cow/IGPv2Settlement.sol";
 import {GPv2Order} from "../../libs/cow/GPv2Order.sol";
 import {IERC1271} from "../../libs/cow/IERC1271.sol";
-import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
-import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 import {ECDSA} from "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 import {Strings} from "openzeppelin-contracts/contracts/utils/Strings.sol";
 
@@ -25,8 +24,16 @@ import {Strings} from "openzeppelin-contracts/contracts/utils/Strings.sol";
  *
  *         Because nothing is reserved on-chain, an over-signed order simply fails validation at settlement
  *         once its backing balance is gone — no reservation, no leak, no cleanup.
+ *
+ *         Signer recovery below is secp256k1 ECDSA, which Shor's algorithm breaks. Left that way
+ *         deliberately: CoW constrains only the ERC-1271 magic value, never the inner scheme, so a
+ *         post-quantum move needs no groundwork here — ship a PQ protocol and let owners swap it in
+ *         with updateProtocols(), or park this one in the guard's deprecated tier so in-flight orders
+ *         keep settling. Only hash-based signatures (WOTS+/XMSS) fit the gas budget of a settlement
+ *         staticcall; ML-DSA, Falcon and SPHINCS+ are orders of magnitude too expensive. Make the
+ *         swap while ECDSA is still trusted — the updateProtocols() call is itself ECDSA-signed.
  */
-contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initializable {
+contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolBase {
     using Strings for uint256;
 
     bytes4 private constant MAGICVALUE = 0x1626ba7e;
@@ -50,11 +57,6 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
     // EIP-712 type hash for CoW's batch order cancellation, signed off-chain to soft-cancel orders.
     bytes32 private constant CANCELLATIONS_TYPE_HASH = keccak256("OrderCancellations(bytes[] orderUids)");
 
-    // A whole TWAP schedule, signed ONCE. Each of `numParts` parts is a fill-or-kill
-    // SELL of `sellAmountPerPart` for at least `buyAmountPerPart`, valid only during its slot
-    // [startTime + i*partDuration, startTime + (i+1)*partDuration]. `startTime` doubles as the appData
-    // salt so a schedule's parts share one fee-bearing appData. The clone reconstructs part i from these
-    // params and matches it to the presented order, so N parts need only this single signature.
     struct TwapOrder {
         address sellToken;
         address buyToken;
@@ -72,24 +74,20 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
     IGPv2Settlement public immutable settlement;
     address public immutable vaultRelayer;
 
-    constructor(address settlement_, address vaultRelayer_) Ownable(msg.sender) {
+    constructor(address settlement_, address vaultRelayer_) {
         settlement = IGPv2Settlement(settlement_);
         vaultRelayer = vaultRelayer_;
     }
 
-    function initialize(address newOwner) external override initializer {
-        _transferOwnership(newOwner);
-    }
-
-    function name() external pure override returns (string memory) {
-        return "CoWSwap V1";
-    }
-
-    function version() external pure override returns (string memory) {
-        return "1.0.0";
-    }
-
     receive() external payable {}
+
+    function protocolLineage() external pure override returns (bytes32) {
+        return keccak256("bitty.adapter.cowswap.v1");
+    }
+
+    function protocolVersion() external pure override returns (uint256) {
+        return 1_000_000; // 1.0.0
+    }
 
     /**
      * @notice EIP-1271 entry. Every order is gasless off-chain: `signature` carries the order plus the
@@ -103,9 +101,6 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
         returns (bytes4)
     {
         if (signature.length == 0) return INVALID;
-        // The same eip1271 entry validates both order placements and order cancellations (CoW asks the
-        // owner to validate the OrderCancellations digest too). Try the order shape first, then the
-        // cancellation shape; each is wrapped so a mismatched payload can't revert.
         try this.validateOffchainOrder(hash, signature) returns (bytes4 res) {
             if (res == MAGICVALUE) return res;
         } catch {}
@@ -142,21 +137,14 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, Ownable, Initial
         return INVALID;
     }
 
-    /**
-     * @notice The exact fee-bearing appData JSON a TWAP part with `salt` commits to. The off-chain layer
-     *         PUTs this byte-for-byte to the CoW API so solvers resolve the hash and apply the partner fee.
-     */
     function twapFullAppData(uint256 salt) public pure returns (string memory) {
         return string.concat(TWAP_APP_DATA_PREFIX, salt.toString(), TWAP_APP_DATA_SUFFIX);
     }
 
-    /// @notice keccak256 of twapFullAppData(salt) — the appData a TWAP part's order must carry.
     function twapAppData(uint256 salt) public pure returns (bytes32) {
         return keccak256(bytes(twapFullAppData(salt)));
     }
 
-    /// @notice The EIP-712 digest a signer produces once to authorize a whole TWAP schedule, under the
-    ///         settlement domain (its own type hash keeps it distinct from a GPv2 order).
     function twapDigest(TwapOrder memory p) public view returns (bytes32) {
         bytes32 structHash = keccak256(
             abi.encode(

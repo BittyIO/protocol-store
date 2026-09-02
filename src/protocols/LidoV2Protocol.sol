@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
+import {BittyV1ProtocolBase} from "../BittyV1ProtocolBase.sol";
 import {IBittyV1Protocol, InvalidAsset} from "../interfaces/IBittyV1Protocol.sol";
-import {IBittyV1Depositable} from "../interfaces/IBittyV1Depositable.sol";
-import {IBittyV1Withdrawable, WithdrawToNotSupported} from "../interfaces/IBittyV1Withdrawable.sol";
+import {IBittyV1Yield, WithdrawToNotSupported} from "../interfaces/IBittyV1Yield.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
-import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 import {IStETH, IUnstETH} from "../libs/lido/v2/Lido.sol";
 import {WETH} from "solmate/tokens/WETH.sol";
 import {EnumerableSet} from "openzeppelin-contracts/contracts/utils/structs/EnumerableSet.sol";
 
 error WETHBalanceNotEnough();
 
-contract LidoV2Protocol is IBittyV1Protocol, IBittyV1Depositable, IBittyV1Withdrawable, Ownable, Initializable {
+contract LidoV2Protocol is IBittyV1Yield, BittyV1ProtocolBase {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.UintSet;
     EnumerableSet.UintSet private _unstakeRequests;
@@ -24,22 +22,18 @@ contract LidoV2Protocol is IBittyV1Protocol, IBittyV1Depositable, IBittyV1Withdr
 
     mapping(address => address) public receiptTokenOf;
 
-    function name() external pure override returns (string memory) {
-        return "Lido V2";
-    }
-
-    function version() external pure override returns (string memory) {
-        return "1.0.0";
-    }
-
-    constructor(address stETH_, address unstETH_, address weth_) Ownable(msg.sender) {
+    constructor(address stETH_, address unstETH_, address weth_) {
         stETH = IStETH(stETH_);
         unstETH = IUnstETH(unstETH_);
         weth = WETH(payable(weth_));
     }
 
-    function initialize(address newOwner) external override initializer {
-        _transferOwnership(newOwner);
+    function protocolLineage() external pure override returns (bytes32) {
+        return keccak256("bitty.adapter.lido.v2");
+    }
+
+    function protocolVersion() external pure override returns (uint256) {
+        return 1_000_000; // 1.0.0
     }
 
     receive() external payable {}

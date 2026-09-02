@@ -1,15 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
+import {BittyV1ProtocolBase} from "../BittyV1ProtocolBase.sol";
 import {IBittyV1Protocol, InvalidAsset} from "../interfaces/IBittyV1Protocol.sol";
-import {IBittyV1Depositable} from "../interfaces/IBittyV1Depositable.sol";
-import {IBittyV1Withdrawable} from "../interfaces/IBittyV1Withdrawable.sol";
-import {ClaimNotSupported} from "../interfaces/IBittyV1Withdrawable.sol";
+import {IBittyV1Yield, ClaimNotSupported} from "../interfaces/IBittyV1Yield.sol";
 import {IPsm3} from "../libs/sky/Psm3.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
-import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
 error PsmAssetMismatch();
 
@@ -30,7 +27,7 @@ error PsmAssetMismatch();
  *      As with {SkyV1Protocol}, the receipt token (sUSDS) is held by the VAULT, not by this adapter:
  *      the adapter is a stateless router and holds nothing between calls.
  */
-contract SkyV1EvmProtocol is IBittyV1Protocol, IBittyV1Depositable, IBittyV1Withdrawable, Ownable, Initializable {
+contract SkyV1EvmProtocol is IBittyV1Yield, BittyV1ProtocolBase {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable usdc;
@@ -39,23 +36,19 @@ contract SkyV1EvmProtocol is IBittyV1Protocol, IBittyV1Depositable, IBittyV1With
 
     mapping(address => address) public receiptTokenOf;
 
-    function name() external pure override returns (string memory) {
-        return "Sky V1";
-    }
-
-    function version() external pure override returns (string memory) {
-        return "1.0.0";
-    }
-
-    constructor(address usdc_, address sUsds_, address psm_) Ownable(msg.sender) {
+    constructor(address usdc_, address sUsds_, address psm_) {
         if (IPsm3(psm_).usdc() != usdc_ || IPsm3(psm_).susds() != sUsds_) revert PsmAssetMismatch();
         usdc = IERC20(usdc_);
         sUsds = IERC20(sUsds_);
         psm = IPsm3(psm_);
     }
 
-    function initialize(address newOwner) external override initializer {
-        _transferOwnership(newOwner);
+    function protocolLineage() external pure override returns (bytes32) {
+        return keccak256("bitty.adapter.sky.v1.evm");
+    }
+
+    function protocolVersion() external pure override returns (uint256) {
+        return 1_000_000; // 1.0.0
     }
 
     function deposit(address asset, uint256 amount) external override onlyOwner {

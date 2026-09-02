@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
+import {TestProxy} from "../../helpers/Proxy.sol";
 import {Test} from "forge-std/Test.sol";
 import {CoWSwapV1Protocol} from "protocol-contracts/src/protocols/cowswap/CoWSwapV1Protocol.sol";
 import {IBittyVaultOffchainAuth} from "protocol-contracts/src/interfaces/IBittyVaultOffchainAuth.sol";
@@ -47,8 +48,11 @@ contract TestCoWSwapV1ProtocolOffchainFork is Test {
         vm.createSelectFork("mainnet");
         manager = vm.addr(managerPk);
         vault = new MockVaultAuth(manager, address(mainnet.WETH));
-        protocol = new CoWSwapV1Protocol(mainnet.COW_SETTLEMENT, mainnet.COW_VAULT_RELAYER);
-        protocol.initialize(address(vault));
+        protocol = CoWSwapV1Protocol(
+            payable(TestProxy.deploy(
+                    address(new CoWSwapV1Protocol(mainnet.COW_SETTLEMENT, mainnet.COW_VAULT_RELAYER)), address(vault)
+                ))
+        );
     }
 
     function _order() internal view returns (GPv2Order.Data memory) {

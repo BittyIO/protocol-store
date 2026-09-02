@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
+import {TestProxy} from "../../helpers/Proxy.sol";
 import "forge-std/console.sol";
 import {Test} from "forge-std/Test.sol";
 import {LidoV2Protocol, WETHBalanceNotEnough} from "protocol-contracts/src/protocols/LidoV2Protocol.sol";
@@ -54,8 +55,11 @@ contract TestLidoProtocolFork is Test {
 
     function setUp() public {
         vm.createSelectFork("mainnet");
-        lidoProtocol = new LidoV2Protocol(mainnet.STETH, mainnet.UNSTETH, mainnet.WETH);
-        lidoProtocol.initialize(address(this));
+        lidoProtocol = LidoV2Protocol(
+            payable(TestProxy.deploy(
+                    address(new LidoV2Protocol(mainnet.STETH, mainnet.UNSTETH, mainnet.WETH)), address(this)
+                ))
+        );
         stETH = IStETH(mainnet.STETH);
         unstETH = IUnstETH(mainnet.UNSTETH);
         weth = WETH(payable(mainnet.WETH));
@@ -66,8 +70,11 @@ contract TestLidoProtocolFork is Test {
     }
 
     function test_InitializeRevertWhenCalledTwice() public {
-        LidoV2Protocol newProtocol = new LidoV2Protocol(mainnet.STETH, mainnet.UNSTETH, mainnet.WETH);
-        newProtocol.initialize(address(this));
+        LidoV2Protocol newProtocol = LidoV2Protocol(
+            payable(TestProxy.deploy(
+                    address(new LidoV2Protocol(mainnet.STETH, mainnet.UNSTETH, mainnet.WETH)), address(this)
+                ))
+        );
         vm.expectRevert();
         newProtocol.initialize(address(1));
     }
@@ -122,8 +129,11 @@ contract TestLidoProtocolFork is Test {
     function test_Claim_ReturnWETHToVault() public {
         uint256 claimAmount = 1 ether;
         MockUnstETHSendsEth mockUnstETH = new MockUnstETHSendsEth{value: claimAmount}(claimAmount);
-        LidoV2Protocol protocol = new LidoV2Protocol(mainnet.STETH, address(mockUnstETH), mainnet.WETH);
-        protocol.initialize(address(this));
+        LidoV2Protocol protocol = LidoV2Protocol(
+            payable(TestProxy.deploy(
+                    address(new LidoV2Protocol(mainnet.STETH, address(mockUnstETH), mainnet.WETH)), address(this)
+                ))
+        );
 
         deal(address(weth), address(this), claimAmount);
         weth.approve(address(protocol), claimAmount);
@@ -149,8 +159,11 @@ contract TestLidoProtocolFork is Test {
         uint256 numRequests = 3;
         uint256 totalEth = ethPerClaim * numRequests;
         MockUnstETHSendsEth mockUnstETH = new MockUnstETHSendsEth{value: totalEth}(ethPerClaim);
-        LidoV2Protocol protocol = new LidoV2Protocol(mainnet.STETH, address(mockUnstETH), mainnet.WETH);
-        protocol.initialize(address(this));
+        LidoV2Protocol protocol = LidoV2Protocol(
+            payable(TestProxy.deploy(
+                    address(new LidoV2Protocol(mainnet.STETH, address(mockUnstETH), mainnet.WETH)), address(this)
+                ))
+        );
 
         deal(address(weth), address(this), totalEth);
         weth.approve(address(protocol), totalEth);
@@ -177,8 +190,11 @@ contract TestLidoProtocolFork is Test {
         uint256 principal = 1 ether;
         uint256 claimAmount = 1.1 ether;
         MockUnstETHSendsEth mockUnstETH = new MockUnstETHSendsEth{value: claimAmount}(claimAmount);
-        LidoV2Protocol protocol = new LidoV2Protocol(mainnet.STETH, address(mockUnstETH), mainnet.WETH);
-        protocol.initialize(address(this));
+        LidoV2Protocol protocol = LidoV2Protocol(
+            payable(TestProxy.deploy(
+                    address(new LidoV2Protocol(mainnet.STETH, address(mockUnstETH), mainnet.WETH)), address(this)
+                ))
+        );
 
         deal(address(weth), address(this), principal);
         weth.approve(address(protocol), principal);

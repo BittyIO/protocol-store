@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
+import {BittyV1ProtocolBase} from "../BittyV1ProtocolBase.sol";
 import {IBittyV1AMMProtocol} from "../interfaces/IBittyV1AMMProtocol.sol";
 import {INonfungiblePositionManager} from "../libs/uniswap/v3/Uniswap.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IERC721} from "openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
-import {Initializable} from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
-contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
+contract UniswapV3Protocol is IBittyV1AMMProtocol, BittyV1ProtocolBase {
     using SafeERC20 for IERC20;
 
     address public constant FEE_RECIPIENT = 0x12EE2de7BF086388B1D560eb95e7191Edfab9823;
@@ -17,20 +16,16 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
 
     address public immutable positionManager;
 
-    function name() external pure override returns (string memory) {
-        return "Uniswap V3";
-    }
-
-    function version() external pure override returns (string memory) {
-        return "1.0.0";
-    }
-
-    constructor(address positionManager_) Ownable(msg.sender) {
+    constructor(address positionManager_) {
         positionManager = positionManager_;
     }
 
-    function initialize(address newOwner) external override initializer {
-        _transferOwnership(newOwner);
+    function protocolLineage() external pure override returns (bytes32) {
+        return keccak256("bitty.adapter.uniswap.v3");
+    }
+
+    function protocolVersion() external pure override returns (uint256) {
+        return 1_000_000; // 1.0.0
     }
 
     receive() external payable {}
@@ -134,12 +129,6 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
         IERC721(positionManager).transferFrom(address(this), msg.sender, params.tokenId);
     }
 
-    /**
-     * @notice Claim fees from the Uniswap V3 position.
-     * @dev Claim fees from the Uniswap V3 position.
-     * @param data The data for the claim fees.
-     * @dev Only the owner can execute it, the claim fees must go to the owner (vault).
-     */
     function claimAMMFees(bytes memory data) external override onlyOwner {
         INonfungiblePositionManager.CollectParams memory params =
             abi.decode(data, (INonfungiblePositionManager.CollectParams));
@@ -155,17 +144,6 @@ contract UniswapV3Protocol is IBittyV1AMMProtocol, Ownable, Initializable {
         return uint256(liquidity);
     }
 
-    /**
-     * @notice Collect all owed tokens for a position and split them into principal
-     *         (paid in full to the owner) and trading fees (subject to the protocol
-     *         collect fee).
-     * @dev `principal0`/`principal1` are the exact amounts returned by
-     *      decreaseLiquidity for this operation (0 for a pure fee claim). Anything
-     *      collected beyond the principal is treated as fees. Deriving principal from
-     *      the decreaseLiquidity return — rather than the position's tokensOwed —
-     *      means fees left in tokensOwed after a partial decrease can never be
-     *      misclassified as principal and escape the protocol fee.
-     */
     function _collectAndDistribute(
         uint256 tokenId,
         uint256 principal0,

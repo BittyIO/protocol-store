@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
+import {TestProxy} from "../../helpers/Proxy.sol";
 import {Test} from "forge-std/Test.sol";
-import {ClaimNotSupported} from "protocol-contracts/src/interfaces/IBittyV1Withdrawable.sol";
+import {ClaimNotSupported} from "protocol-contracts/src/interfaces/IBittyV1Yield.sol";
 import {SkyV1Protocol} from "protocol-contracts/src/protocols/SkyV1Protocol.sol";
 import {IDssPsm, ISUsds} from "protocol-contracts/src/libs/sky/Sky.sol";
 import {mainnet} from "../../../script/addresses.sol";
@@ -29,8 +30,11 @@ contract TestSkyV1ProtocolFork is Test {
         sUsds = ISUsds(mainnet.S_USDS);
         psm = IDssPsm(mainnet.SKY_PSM);
 
-        skyProtocol = new SkyV1Protocol(mainnet.USDC, mainnet.USDS, mainnet.S_USDS, mainnet.SKY_PSM);
-        skyProtocol.initialize(address(this));
+        skyProtocol = SkyV1Protocol(
+            TestProxy.deploy(
+                address(new SkyV1Protocol(mainnet.USDC, mainnet.USDS, mainnet.S_USDS, mainnet.SKY_PSM)), address(this)
+            )
+        );
     }
 
     function test_Initialize() public view {
@@ -42,8 +46,11 @@ contract TestSkyV1ProtocolFork is Test {
     }
 
     function test_Initialize_RevertWhenCalledTwice() public {
-        SkyV1Protocol fresh = new SkyV1Protocol(mainnet.USDC, mainnet.USDS, mainnet.S_USDS, mainnet.SKY_PSM);
-        fresh.initialize(address(this));
+        SkyV1Protocol fresh = SkyV1Protocol(
+            TestProxy.deploy(
+                address(new SkyV1Protocol(mainnet.USDC, mainnet.USDS, mainnet.S_USDS, mainnet.SKY_PSM)), address(this)
+            )
+        );
         vm.expectRevert();
         fresh.initialize(address(1));
     }
