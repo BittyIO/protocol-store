@@ -111,7 +111,7 @@ contract ProtocolUpgradeTest is Test {
             new SkyV1Protocol(address(1), address(2), address(3), address(4)).protocolLineage(),
             new SkyV1EvmProtocol(address(1), address(2), address(new MockPsm3(address(1), address(2))))
                 .protocolLineage(),
-            new UniswapV3Protocol(address(1)).protocolLineage(),
+            new UniswapV3Protocol(address(1), address(1), address(1)).protocolLineage(),
             new CoWSwapV1Protocol(address(1), address(2)).protocolLineage()
         ];
         for (uint256 i; i < lineages.length; i++) {
@@ -132,7 +132,7 @@ contract ProtocolUpgradeTest is Test {
                 .protocolVersion(),
             1
         );
-        assertGe(new UniswapV3Protocol(address(1)).protocolVersion(), 1);
+        assertGe(new UniswapV3Protocol(address(1), address(1), address(1)).protocolVersion(), 1);
         assertGe(new CoWSwapV1Protocol(address(1), address(2)).protocolVersion(), 1);
     }
 

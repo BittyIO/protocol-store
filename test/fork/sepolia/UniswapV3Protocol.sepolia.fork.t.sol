@@ -10,6 +10,7 @@ import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/Safe
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IERC721} from "openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
 import {
+    Path,
     IUniswapV3Factory,
     IUniswapV3Pool,
     IUniswapV3Router,
@@ -30,7 +31,14 @@ contract TestUniswapProtocolSepoliaFork is Test {
 
         v3Protocol = UniswapV3Protocol(
             payable(TestProxy.deploy(
-                    address(new UniswapV3Protocol(sepolia.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER)), address(this)
+                    address(
+                        new UniswapV3Protocol(
+                            sepolia.UNISWAP_V3_ROUTER,
+                            sepolia.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER,
+                            sepolia.BITTY_GUARD
+                        )
+                    ),
+                    address(this)
                 ))
         );
         vm.deal(address(v3Protocol), 0);
@@ -127,4 +135,53 @@ contract TestUniswapProtocolSepoliaFork is Test {
     }
 
     receive() external payable {}
+
+    // ============ Uniswap V3 market swap ============
+
+    function test_Sepolia_V3_SwapWETHToUSDT() public {
+        address[] memory path = new address[](2);
+        path[0] = address(sepolia.WETH9);
+        path[1] = address(sepolia.USDT);
+
+        uint24[] memory fees = new uint24[](1);
+        fees[0] = WETH_USDT_FEE;
+
+        bytes memory encodedPath = Path.encodePath(path, fees);
+
+        uint256 sellAmount = 0.01 ether;
+
+        bytes memory swapData = abi.encode(path[0], sellAmount, path[1], uint256(0), encodedPath);
+
+        uint256 usdtBalanceBefore = IERC20(address(sepolia.USDT)).balanceOf(address(this));
+        deal(address(sepolia.WETH9), address(this), sellAmount);
+        IERC20(address(sepolia.WETH9)).forceApprove(address(v3Protocol), sellAmount);
+
+        v3Protocol.swap(swapData, address(this));
+
+        uint256 usdtBalanceAfter = IERC20(address(sepolia.USDT)).balanceOf(address(this));
+        assertGt(usdtBalanceAfter, usdtBalanceBefore, "should receive USDT");
+    }
+
+    function test_Sepolia_V3_SwapUSDTToWETH() public {
+        address[] memory path = new address[](2);
+        path[0] = address(sepolia.USDT);
+        path[1] = address(sepolia.WETH9);
+
+        uint24[] memory fees = new uint24[](1);
+        fees[0] = WETH_USDT_FEE;
+
+        bytes memory encodedPath = Path.encodePath(path, fees);
+
+        uint256 sellAmount = 20 * 1e6;
+
+        bytes memory swapData = abi.encode(path[0], sellAmount, path[1], uint256(0), encodedPath);
+
+        uint256 wethBalanceBefore = IERC20(address(sepolia.WETH9)).balanceOf(address(this));
+        deal(address(sepolia.USDT), address(this), sellAmount);
+        IERC20(address(sepolia.USDT)).forceApprove(address(v3Protocol), sellAmount);
+        v3Protocol.swap(swapData, address(this));
+
+        uint256 wethBalanceAfter = IERC20(address(sepolia.WETH9)).balanceOf(address(this));
+        assertGt(wethBalanceAfter, wethBalanceBefore, "should receive WETH");
+    }
 }
