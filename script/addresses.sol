@@ -15,6 +15,11 @@ library mainnet {
     address public constant POOL_MANAGER = 0x000000000004444c5dc75cB358380D2e3dE08A90;
     address public constant UNISWAP_V3_ROUTER = 0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45;
     address public constant UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
+    // Universal Router (v3 + v4) and v4 core, from developers.uniswap.org (v4 deployments).
+    address public constant UNISWAP_UNIVERSAL_ROUTER = 0x23617e59A5925b2A4Bf75d73ff6711cD0b29De85; // 2.1.2
+    address public constant UNISWAP_V4_POOL_MANAGER = 0x000000000004444c5dc75cB358380D2e3dE08A90;
+    address public constant UNISWAP_V4_STATE_VIEW = 0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227;
+    address public constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
 
     // Lido V2 Protocol
     address public constant STETH = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
@@ -49,6 +54,9 @@ library sepolia {
     address public constant POOL_MANAGER = 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543;
     address public constant UNISWAP_V3_ROUTER = 0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E;
     address public constant UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER = 0x1238536071E1c677A632429e3655c799b22cDA52;
+    // Universal Router (v3 + v4) + canonical Permit2, mirroring deployments/sepolia.toml.
+    address public constant UNISWAP_UNIVERSAL_ROUTER = 0x7E4f6c5e954Da5c61B3423D81E2277431Ac043f3;
+    address public constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
 
     address public constant STETH = 0x3e3FE7dBc6B4C189E7128855dD526361c49b40Af;
     address public constant UNSTETH = 0x1583C7b3f4C3B008720E6BcE5726336b0aB25fdd;
@@ -56,6 +64,26 @@ library sepolia {
     // CoW Swap Protocol — same address on all chains (deterministic deployment)
     address public constant COW_SETTLEMENT = 0x9008D19f58AAbD9eD0D60971565AA8510560ab41;
     address public constant COW_VAULT_RELAYER = 0xC92E8bdf79f0507f65a392b0ab4667716BFE0110;
+
+    address public constant BITTY_GUARD = 0x00006Dc0000DBB00d9bd462ad2005E20007e0Dc7;
+}
+
+/// @dev Robinhood Chain (chain 4663) addresses. Uniswap V3 is the only supported venue so far.
+library robinhood {
+    address public constant WETH = 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73;
+    address public constant USDC = 0x80e0e24718dbFcad49ECAA6F1e6C89A190586cA8;
+    address public constant USDG = 0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168;
+
+    // Uniswap V3 Protocol
+    address public constant UNISWAP_V3_FACTORY = 0x1f7d7550B1b028f7571E69A784071F0205FD2EfA;
+    address public constant UNISWAP_V3_ROUTER = 0xCaf681a66D020601342297493863E78C959E5cb2;
+    address public constant UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER = 0x73991a25C818Bf1f1128dEAaB1492D45638DE0D3;
+    address public constant UNISWAP_V3_QUOTER_V2 = 0x33e885eD0Ec9bF04EcfB19341582aADCb4c8A9E7;
+    // Universal Router (v3 + v4) and v4 core, from developers.uniswap.org (v4 deployments).
+    address public constant UNISWAP_UNIVERSAL_ROUTER = 0x204FAca1764B154221e35c0d20aBb3c525710498; // 2.1.2
+    address public constant UNISWAP_V4_POOL_MANAGER = 0x8366a39CC670B4001A1121B8F6A443A643e40951;
+    address public constant UNISWAP_V4_STATE_VIEW = 0xF3334192D15450CdD385c8B70e03f9A6bD9E673b;
+    address public constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
 
     address public constant BITTY_GUARD = 0x00006Dc0000DBB00d9bd462ad2005E20007e0Dc7;
 }

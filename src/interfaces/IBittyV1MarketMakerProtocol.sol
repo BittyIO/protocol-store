@@ -4,29 +4,16 @@ pragma solidity ^0.8.34;
 import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
 
 /**
- * @title IBittyV1AMMProtocol
- * @notice Interface for AMM (swap and liquidity) protocols.
+ * @title IBittyV1MarketMakerProtocol
+ * @notice Concentrated-liquidity position management: add, remove, decrease, claim fees, and read
+ *         liquidity. Stateful — the position is an NFT held by the vault and persists between calls,
+ *         which is why this side alone carries {positionManager} for the host to approve. Market swaps
+ *         live in {IBittyV1MarketTradeProtocol}. Each concentrated-liquidity version (v3, v4) is its own
+ *         maker adapter, since their position mechanics do not abstract behind one implementation.
  */
-interface IBittyV1AMMProtocol is IBittyV1Protocol {
-    /**
-     * @notice Exact-input swap (market sell): sell exactly `sellAmount`, receive ≥ `buyAmountMin`,
-     *         delivered to `recipient`. Pass the vault itself as `recipient` for a normal swap, or a
-     *         receiver to swap and pay it in one step.
-     * @dev data = abi.encode(sellToken, sellAmount, buyToken, buyAmountMin, path). Gated by the host.
-     */
-    function swap(bytes memory data, address recipient) external payable;
-
-    /**
-     * @notice Exact-output swap (market buy): receive exactly `buyAmount`, spend ≤ `sellAmountMax`,
-     *         delivered to `recipient`.
-     * @dev data = abi.encode(sellToken, sellAmountMax, buyToken, buyAmount, reversedPath). The path
-     *      must be reversed (buyToken → … → sellToken) per Uniswap V3 exactOutput. Gated by the host.
-     */
-    function swapExactOut(bytes memory data, address recipient) external;
-
+interface IBittyV1MarketMakerProtocol is IBittyV1Protocol {
     /**
      * @notice Add liquidity to the AMM protocol.
-     * @dev Add liquidity to the AMM protocol.
      * @param data The data for the add liquidity.
      * @dev Gated by the host; this adapter does not check who is calling.
      */
@@ -50,7 +37,6 @@ interface IBittyV1AMMProtocol is IBittyV1Protocol {
 
     /**
      * @notice Claim fees from the AMM protocol.
-     * @dev Claim fees from the AMM protocol.
      * @param data The data for the claim fees.
      * @dev Gated by the host; this adapter does not check who is calling.
      */
@@ -58,9 +44,14 @@ interface IBittyV1AMMProtocol is IBittyV1Protocol {
 
     /**
      * @notice Get the liquidity of the AMM protocol.
-     * @dev Get the liquidity of the AMM protocol.
      * @param data The data for the get liquidity.
      * @dev Gated by the host; this adapter does not check who is calling.
      */
     function getLiquidity(bytes memory data) external view returns (uint256);
+
+    /**
+     * @notice The position-NFT manager (ERC-721) this adapter mints into. The host reads it to approve
+     *         the adapter clone to pull the vault's position NFTs before an unwind.
+     */
+    function positionManager() external view returns (address);
 }

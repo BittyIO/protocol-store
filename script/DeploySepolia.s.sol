@@ -6,7 +6,8 @@ import {DeployProtocols} from "./DeployProtocols.sol";
 contract DeploySepolia is DeployProtocols {
     function deploy() public override {
         _deployAave();
-        _deployUniswap();
+        _deployUniswapUniversal();
+        _deployUniswapV3Maker();
         _deployCoWSwap();
         _deployLido();
     }

@@ -12,7 +12,7 @@ Adapters are **curated** — only addresses registered in the Bitty Guard may be
 | `LidoV2Protocol` | Staking | WETH → stETH, async withdrawal queue | Mainnet, Sepolia |
 | `SkyV1Protocol` | Staking | USDC → sUSDS via Sky PSM + ERC-4626 vault | Mainnet |
 | `SkyV1EvmProtocol` | Staking | USDC → sUSDS via PSM3 (single-hop) | Base |
-| `UniswapV3Protocol` | AMM | Uniswap V3 LP (mint, decrease, remove, fee claim) | Mainnet, Sepolia, Base |
+| `UniswapUniversalProtocol` | AMM | Market swaps through the Universal Router (v3 + v4 routes) or a plain v3 path; Uniswap V3 LP (mint, decrease, remove, fee claim) | Mainnet, Sepolia, Base, Robinhood |
 | `CoWSwapV1Protocol` | Intent | CoW Swap off-chain orders (ERC-1271 validation) | Mainnet, Sepolia, Base |
 
 ### How adapters fit the vault
@@ -32,7 +32,7 @@ Vault (owner)
 
 | Adapter | Fee | Recipient |
 |---|---|---|
-| `UniswapV3Protocol` | 1% of collected LP trading fees | `0x12EE2de7BF086388B1D560eb95e7191Edfab9823` |
+| `UniswapUniversalProtocol` | 0.2% on market swaps; 1% of collected LP trading fees | `0x12EE2de7BF086388B1D560eb95e7191Edfab9823` |
 | `CoWSwapV1Protocol` | 0.2% partner fee (enforced in order `appData`) | same |
 
 Principal returned from liquidity decreases is not subject to the Uniswap collect fee.

@@ -3,7 +3,8 @@ pragma solidity ^0.8.34;
 
 import {console2} from "forge-std/console2.sol";
 import {AaveV3Protocol} from "../src/protocols/AaveV3Protocol.sol";
-import {UniswapV3Protocol} from "../src/protocols/UniswapV3Protocol.sol";
+import {UniswapUniversalTradeProtocol} from "../src/protocols/UniswapUniversalTradeProtocol.sol";
+import {UniswapV3MarketMakerProtocol} from "../src/protocols/UniswapV3MarketMakerProtocol.sol";
 import {LidoV2Protocol} from "../src/protocols/LidoV2Protocol.sol";
 import {SkyV1Protocol} from "../src/protocols/SkyV1Protocol.sol";
 import {SkyV1EvmProtocol} from "../src/protocols/SkyV1EvmProtocol.sol";
@@ -47,20 +48,6 @@ abstract contract DeployProtocols is DeployScript {
         vm.startBroadcast();
     }
 
-    /**
-     * @dev Returns the address to reuse, or zero when the caller should deploy.
-     *
-     *      Reuse is decided by the adapter's declared protocolVersion(), NOT by raw bytecode. A live
-     *      adapter compiled at a different time has different bytecode for the same logic (compiler +
-     *      CBOR-metadata drift), so a code comparison redeploys every adapter — proven on the live
-     *      chains, where Aave/CoW/Lido all differ byte-for-byte yet are logically unchanged. The
-     *      version only moves on an INTENTIONAL change (and it is exactly what upgradeProtocol gates
-     *      on), so comparing it redeploys only the adapter whose version was bumped — e.g. Uniswap
-     *      1.0.0 → 1.0.1 for the restored market swap — and reuses the rest.
-     *
-     *      A TOML entry alone is still not enough — a simulated run writes addresses that never
-     *      existed on chain — because there is no code there to read a version from (the try reverts).
-     */
     function _reuse(string memory name, string memory key, bytes memory initCode) private returns (address) {
         address recorded = getAddressOr(key, address(0));
         if (recorded.code.length == 0) return address(0);
@@ -91,13 +78,30 @@ abstract contract DeployProtocols is DeployScript {
         _record("AaveV3Protocol", "AAVE_V3_PROTOCOL", address(new AaveV3Protocol(aaveV3, dataProvider)));
     }
 
-    function _deployUniswap() internal {
-        address router = getAddress("UNISWAP_V3_ROUTER");
-        address npm = getAddress("UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER");
+    function _deployUniswapUniversal() internal {
         address guard = getAddress("BITTY_GUARD");
-        bytes memory initCode = abi.encodePacked(type(UniswapV3Protocol).creationCode, abi.encode(router, npm, guard));
-        if (_reuse("UniswapV3Protocol", "UNISWAP_V3_PROTOCOL", initCode) != address(0)) return;
-        _record("UniswapV3Protocol", "UNISWAP_V3_PROTOCOL", address(new UniswapV3Protocol(router, npm, guard)));
+        address universal = getAddress("UNISWAP_UNIVERSAL_ROUTER");
+        address permit2 = getAddress("PERMIT2");
+        bytes memory initCode = abi.encodePacked(
+            type(UniswapUniversalTradeProtocol).creationCode, abi.encode(universal, permit2, guard)
+        );
+        if (_reuse("UniswapUniversalTradeProtocol", "UNISWAP_TRADE_PROTOCOL", initCode) != address(0)) return;
+        _record(
+            "UniswapUniversalTradeProtocol",
+            "UNISWAP_TRADE_PROTOCOL",
+            address(new UniswapUniversalTradeProtocol(universal, permit2, guard))
+        );
+    }
+
+    function _deployUniswapV3Maker() internal {
+        address npm = getAddress("UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER");
+        bytes memory initCode = abi.encodePacked(type(UniswapV3MarketMakerProtocol).creationCode, abi.encode(npm));
+        if (_reuse("UniswapV3MarketMakerProtocol", "UNISWAP_V3_MAKER_PROTOCOL", initCode) != address(0)) return;
+        _record(
+            "UniswapV3MarketMakerProtocol",
+            "UNISWAP_V3_MAKER_PROTOCOL",
+            address(new UniswapV3MarketMakerProtocol(npm))
+        );
     }
 
     function _deployCoWSwap() internal {

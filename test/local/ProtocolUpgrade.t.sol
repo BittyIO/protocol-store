@@ -7,7 +7,8 @@ import {AaveV3Protocol} from "../../src/protocols/AaveV3Protocol.sol";
 import {LidoV2Protocol} from "../../src/protocols/LidoV2Protocol.sol";
 import {SkyV1Protocol} from "../../src/protocols/SkyV1Protocol.sol";
 import {SkyV1EvmProtocol} from "../../src/protocols/SkyV1EvmProtocol.sol";
-import {UniswapV3Protocol} from "../../src/protocols/UniswapV3Protocol.sol";
+import {UniswapUniversalTradeProtocol} from "../../src/protocols/UniswapUniversalTradeProtocol.sol";
+import {UniswapV3MarketMakerProtocol} from "../../src/protocols/UniswapV3MarketMakerProtocol.sol";
 import {CoWSwapV1Protocol} from "../../src/protocols/cowswap/CoWSwapV1Protocol.sol";
 import {ERC1967Proxy} from "openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UUPSUpgradeable} from "openzeppelin-contracts/contracts/proxy/utils/UUPSUpgradeable.sol";
@@ -105,13 +106,14 @@ contract ProtocolUpgradeTest is Test {
      * other check still passed, so the collision must fail here rather than in production.
      */
     function test_everyAdapterHasADistinctLineage() public {
-        bytes32[6] memory lineages = [
+        bytes32[7] memory lineages = [
             new AaveV3Protocol(address(1), address(2)).protocolLineage(),
             new LidoV2Protocol(address(1), address(2), address(3)).protocolLineage(),
             new SkyV1Protocol(address(1), address(2), address(3), address(4)).protocolLineage(),
             new SkyV1EvmProtocol(address(1), address(2), address(new MockPsm3(address(1), address(2))))
                 .protocolLineage(),
-            new UniswapV3Protocol(address(1), address(1), address(1)).protocolLineage(),
+            new UniswapUniversalTradeProtocol(address(1), address(1), address(1)).protocolLineage(),
+            new UniswapV3MarketMakerProtocol(address(1)).protocolLineage(),
             new CoWSwapV1Protocol(address(1), address(2)).protocolLineage()
         ];
         for (uint256 i; i < lineages.length; i++) {
@@ -132,7 +134,10 @@ contract ProtocolUpgradeTest is Test {
                 .protocolVersion(),
             1
         );
-        assertGe(new UniswapV3Protocol(address(1), address(1), address(1)).protocolVersion(), 1);
+        assertGe(
+            new UniswapUniversalTradeProtocol(address(1), address(1), address(1)).protocolVersion(), 1
+        );
+        assertGe(new UniswapV3MarketMakerProtocol(address(1)).protocolVersion(), 1);
         assertGe(new CoWSwapV1Protocol(address(1), address(2)).protocolVersion(), 1);
     }
 
