@@ -246,6 +246,35 @@ contract CoWSwapV1ProtocolOffchainTest is Test {
         assertEq(cow.isValidSignature(hash, sig), bytes4(0xffffffff));
     }
 
+    /**
+     * A schedule is bound to ONE vault. The manager here is authorized on a second vault too — the
+     * replay precondition — and the attacker rebuilds the part order against that vault (its receiver,
+     * its clone). The schedule signature was produced for the FIRST vault's clone, so the second clone
+     * recovers a different signer and rejects; re-signed for the second clone, the same schedule passes.
+     */
+    function test_twap_scheduleSignedForOneVaultRejectedByAnother() public {
+        MockVaultAuth vaultB = new MockVaultAuth(manager, BUY);
+        CoWSwapV1Protocol cowB = CoWSwapV1Protocol(
+            payable(new ERC1967Proxy(
+                    address(new CoWSwapV1Protocol(address(settlement), RELAYER)),
+                    abi.encodeCall(BittyV1ProtocolBase.initialize, (address(vaultB)))
+                ))
+        );
+
+        CoWSwapV1Protocol.TwapOrder memory p = _twap();
+        vm.warp(p.startTime); // part 0's slot is open — rejection must come from the binding, not timing
+
+        GPv2Order.Data memory order = _twapPartOrder(p, 0);
+        order.receiver = address(vaultB); // the replayed part is rebuilt against vault B
+        bytes32 hash = GPv2Order.hash(order, settlement.domainSeparator());
+
+        bytes memory replayed = abi.encode(order, p, uint256(0), _sign(managerPk, cow.twapDigest(p)));
+        assertEq(cowB.isValidSignature(hash, replayed), bytes4(0xffffffff), "schedule replayed across vaults");
+
+        bytes memory signedForB = abi.encode(order, p, uint256(0), _sign(managerPk, cowB.twapDigest(p)));
+        assertEq(cowB.isValidSignature(hash, signedForB), bytes4(0x1626ba7e), "schedule signed for B must pass");
+    }
+
     function test_twap_indexOutOfRange_rejected() public view {
         CoWSwapV1Protocol.TwapOrder memory p = _twap();
         (bytes32 hash, bytes memory sig) = _twapPayload(p, p.numParts, managerPk);

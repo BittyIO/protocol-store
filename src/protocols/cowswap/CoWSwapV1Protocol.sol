@@ -67,8 +67,16 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
         uint256 numParts;
     }
 
+    /**
+     * @dev `vault` binds a signed schedule to exactly one vault. The schedule signature authorises
+     *      parts that are RECONSTRUCTED per vault (receiver == owner()), so without this field a signer
+     *      authorized on several vaults would have a schedule signed for one of them replayable against
+     *      all of them — no receiver or owner check can catch that. The digest therefore carries the
+     *      validating clone's vault, and a schedule presented to any other vault's clone recovers a
+     *      different signer and fails authorization.
+     */
     bytes32 private constant TWAP_TYPE_HASH = keccak256(
-        "TwapOrder(address sellToken,address buyToken,uint256 sellAmountPerPart,uint256 buyAmountPerPart,uint256 startTime,uint256 partDuration,uint256 numParts)"
+        "TwapOrder(address vault,address sellToken,address buyToken,uint256 sellAmountPerPart,uint256 buyAmountPerPart,uint256 startTime,uint256 partDuration,uint256 numParts)"
     );
 
     IGPv2Settlement public immutable settlement;
@@ -149,6 +157,7 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
         bytes32 structHash = keccak256(
             abi.encode(
                 TWAP_TYPE_HASH,
+                owner(),
                 p.sellToken,
                 p.buyToken,
                 p.sellAmountPerPart,
@@ -211,6 +220,8 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
      *          (`validTo >= block.timestamp`). A GPv2 order carries no start time, so this check is what
      *          enforces one part per slot instead of letting every part settle from the moment of signing;
      *       3. the signer recovered from the single `params` signature must be authorized for the trade.
+     *          That signature is over {twapDigest}, which includes THIS clone's vault, so a schedule
+     *          signed for another vault recovers a different signer here and fails authorization.
      */
     function validateOffchainTwapPart(bytes32 hash, bytes calldata signature) external view returns (bytes4) {
         (GPv2Order.Data memory order, TwapOrder memory p, uint256 partIndex, bytes memory signerSig) =
