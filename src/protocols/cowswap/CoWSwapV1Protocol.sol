@@ -86,7 +86,7 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
     }
 
     function protocolVersion() external pure override returns (uint256) {
-        return 1_000_000; // 1.0.0
+        return 1_000_001; // 1.0.1
     }
 
     /**
@@ -206,7 +206,10 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
      * @dev  1. the carried order must hash (settlement domain) to exactly `hash`;
      *       2. every field must equal the deterministic part-`partIndex` order derived from `params`
      *          (fill-or-kill ERC-20/ERC-20 SELL, feeAmount 0, receiver == vault, salted fee appData, and the
-     *          slot's validTo), and the part must be within the schedule and not expired;
+     *          slot's validTo), and the part must be within the schedule, its slot must have opened
+     *          (`block.timestamp >= startTime + partIndex * partDuration`), and it must not be expired
+     *          (`validTo >= block.timestamp`). A GPv2 order carries no start time, so this check is what
+     *          enforces one part per slot instead of letting every part settle from the moment of signing;
      *       3. the signer recovered from the single `params` signature must be authorized for the trade.
      */
     function validateOffchainTwapPart(bytes32 hash, bytes calldata signature) external view returns (bytes4) {
@@ -226,7 +229,8 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
         if (order.kind != GPv2Order.KIND_SELL) return INVALID;
         if (order.partiallyFillable) return INVALID;
         if (order.sellTokenBalance != GPv2Order.BALANCE_ERC20) return INVALID;
-        if (order.buyTokenBalance != GPv2Order.BALANCE_ERC20) return INVALID;
+        if (order.buyTokenBalance != GPv2Order.BALANCE_ERC20) return INVALID;        
+        if (block.timestamp < p.startTime + partIndex * p.partDuration) return INVALID;
         if (order.validTo < block.timestamp) return INVALID;
 
         address signer = ECDSA.recover(twapDigest(p), signerSig);

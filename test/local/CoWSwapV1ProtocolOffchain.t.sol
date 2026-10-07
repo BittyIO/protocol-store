@@ -195,16 +195,53 @@ contract CoWSwapV1ProtocolOffchainTest is Test {
         sig = abi.encode(order, p, i, _sign(pk, cow.twapDigest(p)));
     }
 
-    function test_twap_everyPartSignableFromOneSignature() public view {
+    function test_twap_everyPartSignableFromOneSignature() public {
         CoWSwapV1Protocol.TwapOrder memory p = _twap();
         for (uint256 i = 0; i < p.numParts; i++) {
+            // Each part is only valid once its slot has opened.
+            vm.warp(p.startTime + i * p.partDuration);
             (bytes32 hash, bytes memory sig) = _twapPayload(p, i, managerPk);
             assertEq(cow.isValidSignature(hash, sig), bytes4(0x1626ba7e));
         }
     }
 
+    function test_twap_partBeforeSlotOpens_rejected() public {
+        CoWSwapV1Protocol.TwapOrder memory p = _twap();
+        // At startTime only part 0 is live; later parts must wait for their slot.
+        (bytes32 hash, bytes memory sig) = _twapPayload(p, 1, managerPk);
+        assertEq(cow.isValidSignature(hash, sig), bytes4(0xffffffff));
+
+        vm.warp(p.startTime + p.partDuration - 1);
+        assertEq(cow.isValidSignature(hash, sig), bytes4(0xffffffff));
+
+        vm.warp(p.startTime + p.partDuration);
+        assertEq(cow.isValidSignature(hash, sig), bytes4(0x1626ba7e));
+    }
+
+    function test_twap_wholeScheduleNotValidInFirstBlock() public {
+        CoWSwapV1Protocol.TwapOrder memory p = _twap();
+        // In the first slot, only part 0 validates; parts 1..n-1 must not settle early.
+        (bytes32 hash0, bytes memory sig0) = _twapPayload(p, 0, managerPk);
+        assertEq(cow.isValidSignature(hash0, sig0), bytes4(0x1626ba7e));
+        for (uint256 i = 1; i < p.numParts; i++) {
+            (bytes32 hash, bytes memory sig) = _twapPayload(p, i, managerPk);
+            assertEq(cow.isValidSignature(hash, sig), bytes4(0xffffffff));
+        }
+    }
+
+    function test_twap_beforeStartTime_rejected() public {
+        CoWSwapV1Protocol.TwapOrder memory p = _twap();
+        p.startTime = block.timestamp + 7 days;
+        (bytes32 hash, bytes memory sig) = _twapPayload(p, 0, managerPk);
+        assertEq(cow.isValidSignature(hash, sig), bytes4(0xffffffff));
+
+        vm.warp(p.startTime);
+        assertEq(cow.isValidSignature(hash, sig), bytes4(0x1626ba7e));
+    }
+
     function test_twap_wrongSigner_rejected() public {
         CoWSwapV1Protocol.TwapOrder memory p = _twap();
+        vm.warp(p.startTime + p.partDuration); // inside part-1's slot so rejection is on the signer
         (bytes32 hash, bytes memory sig) = _twapPayload(p, 1, 0xB0B);
         assertEq(cow.isValidSignature(hash, sig), bytes4(0xffffffff));
     }
@@ -215,8 +252,9 @@ contract CoWSwapV1ProtocolOffchainTest is Test {
         assertEq(cow.isValidSignature(hash, sig), bytes4(0xffffffff));
     }
 
-    function test_twap_tamperedValidTo_rejected() public view {
+    function test_twap_tamperedValidTo_rejected() public {
         CoWSwapV1Protocol.TwapOrder memory p = _twap();
+        vm.warp(p.startTime + p.partDuration); // inside part-1's slot so rejection is on validTo
         GPv2Order.Data memory order = _twapPartOrder(p, 1);
         order.validTo = uint32(p.startTime + 999); // not the slot boundary
         bytes32 hash = GPv2Order.hash(order, settlement.domainSeparator());
@@ -225,8 +263,9 @@ contract CoWSwapV1ProtocolOffchainTest is Test {
     }
 
     // Changing the signed schedule after signing breaks the single-signature binding.
-    function test_twap_tamperedScheduleAfterSigning_rejected() public view {
+    function test_twap_tamperedScheduleAfterSigning_rejected() public {
         CoWSwapV1Protocol.TwapOrder memory p = _twap();
+        vm.warp(p.startTime + p.partDuration); // inside part-1's slot so rejection is on the digest
         GPv2Order.Data memory order = _twapPartOrder(p, 1);
         bytes32 hash = GPv2Order.hash(order, settlement.domainSeparator());
         bytes memory managerSig = _sign(managerPk, cow.twapDigest(p));
