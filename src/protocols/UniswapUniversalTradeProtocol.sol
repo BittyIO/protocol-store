@@ -116,7 +116,6 @@ contract UniswapUniversalTradeProtocol is IBittyV1MarketTradeProtocol, BittyV1Pr
         _refundIn(tokenIn);
         _refundNative();
     }
-    
 
     // Run an exact-in swap of `amountIn` of `tokenIn` through `route`, output landing on this adapter.
     function _routeExactIn(address tokenIn, uint256 amountIn, bytes memory route) private {
@@ -138,11 +137,11 @@ contract UniswapUniversalTradeProtocol is IBittyV1MarketTradeProtocol, BittyV1Pr
         _permit2Grant(tokenIn, maxIn);
         IUniversalRouter(universalRouter).execute(commands, inputs, deadline);
     }
-    
+
     function _isStablecoin(address token) internal view returns (bool) {
         return (IBittyV1Guard(bittyGuard).assetCategory(token) & ASSET_STABLE_COIN) != 0;
     }
-    
+
     function _pullIn(address token, uint256 amount) private {
         if (token != address(0)) IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
     }
@@ -166,7 +165,7 @@ contract UniswapUniversalTradeProtocol is IBittyV1MarketTradeProtocol, BittyV1Pr
             IERC20(token).safeTransfer(to, amount);
         }
     }
-    
+
     function _payFrom(address token, address to, uint256 amount) private {
         if (token == address(0)) {
             Address.sendValue(payable(to), amount);

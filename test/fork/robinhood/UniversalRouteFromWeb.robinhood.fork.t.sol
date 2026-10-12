@@ -34,16 +34,14 @@ contract UniversalRouteFromWebRobinhoodForkTest is Test {
         StubGuardForRoutes guard = new StubGuardForRoutes();
         guard.set(robinhood.USDG, 1);
         adapter = UniswapUniversalTradeProtocol(
-            payable(
-                TestProxy.deploy(
+            payable(TestProxy.deploy(
                     address(
                         new UniswapUniversalTradeProtocol(
                             robinhood.UNISWAP_UNIVERSAL_ROUTER, robinhood.PERMIT2, address(guard)
                         )
                     ),
                     address(this)
-                )
-            )
+                ))
         );
     }
 
@@ -71,26 +69,16 @@ contract UniversalRouteFromWebRobinhoodForkTest is Test {
     function test_WebRoute_SellWethForUsdg() public {
         bytes memory route = vm.envOr("ROUTE_SELL", bytes(""));
         if (route.length == 0) return;
-        uint256 got = _swap(
-            robinhood.WETH,
-            vm.envUint("ROUTE_SELL_AMOUNT"),
-            robinhood.USDG,
-            vm.envUint("ROUTE_SELL_MIN"),
-            route
-        );
+        uint256 got =
+            _swap(robinhood.WETH, vm.envUint("ROUTE_SELL_AMOUNT"), robinhood.USDG, vm.envUint("ROUTE_SELL_MIN"), route);
         emit log_named_uint("USDG received", got);
     }
 
     function test_WebRoute_BuyWethWithUsdg() public {
         bytes memory route = vm.envOr("ROUTE_BUY", bytes(""));
         if (route.length == 0) return;
-        uint256 got = _swap(
-            robinhood.USDG,
-            vm.envUint("ROUTE_BUY_AMOUNT"),
-            robinhood.WETH,
-            vm.envUint("ROUTE_BUY_MIN"),
-            route
-        );
+        uint256 got =
+            _swap(robinhood.USDG, vm.envUint("ROUTE_BUY_AMOUNT"), robinhood.WETH, vm.envUint("ROUTE_BUY_MIN"), route);
         emit log_named_uint("WETH received", got);
     }
 }

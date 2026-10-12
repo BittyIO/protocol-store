@@ -124,7 +124,7 @@ contract UniswapV3MarketMakerProtocolSepoliaForkTest is Test {
         INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
             tokenId: tokenId, recipient: address(this), amount0Max: type(uint128).max, amount1Max: type(uint128).max
         });
-        maker.claimAMMFees(abi.encode(collectParams));
+        maker.claimMarketMakerFees(abi.encode(collectParams));
     }
 
     receive() external payable {}

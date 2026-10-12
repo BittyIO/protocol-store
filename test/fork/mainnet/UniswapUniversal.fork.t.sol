@@ -3,8 +3,10 @@ pragma solidity ^0.8.34;
 
 import {Test} from "forge-std/Test.sol";
 import {TestProxy} from "../../helpers/Proxy.sol";
-import {UniswapUniversalTradeProtocol, InsufficientOutput} from
-    "protocol-contracts/src/protocols/UniswapUniversalTradeProtocol.sol";
+import {
+    UniswapUniversalTradeProtocol,
+    InsufficientOutput
+} from "protocol-contracts/src/protocols/UniswapUniversalTradeProtocol.sol";
 import {UniversalRoute} from "protocol-contracts/src/libs/uniswap/universal/UniversalRouter.sol";
 import {mainnet} from "../../../script/addresses.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
@@ -72,16 +74,14 @@ contract UniswapUniversalForkTest is Test {
     function setUp() public {
         vm.createSelectFork("mainnet");
         adapter = UniswapUniversalTradeProtocol(
-            payable(
-                TestProxy.deploy(
+            payable(TestProxy.deploy(
                     address(
                         new UniswapUniversalTradeProtocol(
                             mainnet.UNISWAP_UNIVERSAL_ROUTER, mainnet.PERMIT2, mainnet.BITTY_GUARD
                         )
                     ),
                     address(this)
-                )
-            )
+                ))
         );
         vm.deal(address(adapter), 0);
     }
@@ -329,5 +329,4 @@ contract UniswapUniversalForkTest is Test {
         // Permit2 records a zero expiry as "now", which is spent by the next block either way.
         assertLe(expiration, block.timestamp, "and expired");
     }
-
 }

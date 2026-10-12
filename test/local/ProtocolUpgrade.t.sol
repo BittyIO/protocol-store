@@ -134,9 +134,7 @@ contract ProtocolUpgradeTest is Test {
                 .protocolVersion(),
             1
         );
-        assertGe(
-            new UniswapUniversalTradeProtocol(address(1), address(1), address(1)).protocolVersion(), 1
-        );
+        assertGe(new UniswapUniversalTradeProtocol(address(1), address(1), address(1)).protocolVersion(), 1);
         assertGe(new UniswapV3MarketMakerProtocol(address(1)).protocolVersion(), 1);
         assertGe(new CoWSwapV1Protocol(address(1), address(2)).protocolVersion(), 1);
     }

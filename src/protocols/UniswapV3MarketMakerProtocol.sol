@@ -135,7 +135,7 @@ contract UniswapV3MarketMakerProtocol is IBittyV1MarketMakerProtocol, BittyV1Pro
         IERC721(positionManager).transferFrom(address(this), msg.sender, params.tokenId);
     }
 
-    function claimAMMFees(bytes memory data) external override onlyOwner {
+    function claimMarketMakerFees(bytes memory data) external override onlyOwner {
         INonfungiblePositionManager.CollectParams memory params =
             abi.decode(data, (INonfungiblePositionManager.CollectParams));
 

@@ -82,9 +82,8 @@ abstract contract DeployProtocols is DeployScript {
         address guard = getAddress("BITTY_GUARD");
         address universal = getAddress("UNISWAP_UNIVERSAL_ROUTER");
         address permit2 = getAddress("PERMIT2");
-        bytes memory initCode = abi.encodePacked(
-            type(UniswapUniversalTradeProtocol).creationCode, abi.encode(universal, permit2, guard)
-        );
+        bytes memory initCode =
+            abi.encodePacked(type(UniswapUniversalTradeProtocol).creationCode, abi.encode(universal, permit2, guard));
         if (_reuse("UniswapUniversalTradeProtocol", "UNISWAP_TRADE_PROTOCOL", initCode) != address(0)) return;
         _record(
             "UniswapUniversalTradeProtocol",
@@ -98,9 +97,7 @@ abstract contract DeployProtocols is DeployScript {
         bytes memory initCode = abi.encodePacked(type(UniswapV3MarketMakerProtocol).creationCode, abi.encode(npm));
         if (_reuse("UniswapV3MarketMakerProtocol", "UNISWAP_V3_MAKER_PROTOCOL", initCode) != address(0)) return;
         _record(
-            "UniswapV3MarketMakerProtocol",
-            "UNISWAP_V3_MAKER_PROTOCOL",
-            address(new UniswapV3MarketMakerProtocol(npm))
+            "UniswapV3MarketMakerProtocol", "UNISWAP_V3_MAKER_PROTOCOL", address(new UniswapV3MarketMakerProtocol(npm))
         );
     }
 

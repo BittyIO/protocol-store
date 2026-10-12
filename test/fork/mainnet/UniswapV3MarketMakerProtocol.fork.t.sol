@@ -51,7 +51,7 @@ contract UniswapV3MarketMakerProtocolForkTest is Test {
         IERC721(mainnet.UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER).setApprovalForAll(address(maker), true);
     }
 
-    // ============ Uniswap V3 AMM (addLiquidity / removeLiquidity / claimAMMFees / getLiquidity) ============
+    // ============ Uniswap V3 AMM (addLiquidity / removeLiquidity / claimMarketMakerFees / getLiquidity) ============
 
     bytes32 constant ERC721_TRANSFER_TOPIC = keccak256("Transfer(address,address,uint256)");
 
@@ -126,7 +126,7 @@ contract UniswapV3MarketMakerProtocolForkTest is Test {
         INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
             tokenId: tokenId, recipient: address(this), amount0Max: type(uint128).max, amount1Max: type(uint128).max
         });
-        maker.claimAMMFees(abi.encode(collectParams));
+        maker.claimMarketMakerFees(abi.encode(collectParams));
     }
 
     /// @notice `CollectParams.recipient` in calldata must be ignored; fees go to the protocol owner only.
@@ -144,7 +144,7 @@ contract UniswapV3MarketMakerProtocolForkTest is Test {
         INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
             tokenId: tokenId, recipient: encodedRecipient, amount0Max: type(uint128).max, amount1Max: type(uint128).max
         });
-        maker.claimAMMFees(abi.encode(collectParams));
+        maker.claimMarketMakerFees(abi.encode(collectParams));
 
         assertEq(IERC20(token0).balanceOf(encodedRecipient), bal0Before, "token0 must not go to encoded recipient");
         assertEq(IERC20(token1).balanceOf(encodedRecipient), bal1Before, "token1 must not go to encoded recipient");
@@ -175,7 +175,7 @@ contract UniswapV3MarketMakerProtocolForkTest is Test {
         INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
             tokenId: tokenId, recipient: address(this), amount0Max: type(uint128).max, amount1Max: type(uint128).max
         });
-        maker.claimAMMFees(abi.encode(collectParams));
+        maker.claimMarketMakerFees(abi.encode(collectParams));
 
         _assertFeeSplit(
             IERC20(token0).balanceOf(FEE_RECIPIENT) - feeRec0Before,
@@ -208,7 +208,7 @@ contract UniswapV3MarketMakerProtocolForkTest is Test {
             amount0Max: type(uint128).max,
             amount1Max: type(uint128).max
         });
-        maker.claimAMMFees(abi.encode(collectParams));
+        maker.claimMarketMakerFees(abi.encode(collectParams));
 
         _assertFeeSplit(
             IERC20(token0).balanceOf(FEE_RECIPIENT) - feeRec0Before,
@@ -266,7 +266,8 @@ contract UniswapV3MarketMakerProtocolForkTest is Test {
         uint256 balance1After = IERC20(token1).balanceOf(address(this));
 
         assertTrue(
-            balance0After > balance0Before || balance1After > balance1Before, "tokens must arrive without claimAMMFees"
+            balance0After > balance0Before || balance1After > balance1Before,
+            "tokens must arrive without claimMarketMakerFees"
         );
         assertEq(IERC20(token0).balanceOf(address(maker)), 0, "protocol must hold no token0");
         assertEq(IERC20(token1).balanceOf(address(maker)), 0, "protocol must hold no token1");
@@ -479,9 +480,7 @@ contract UniswapV3MarketMakerProtocolForkTest is Test {
         maker.decreaseLiquidity(abi.encode(decreaseParams));
 
         assertEq(
-            maker.getLiquidity(abi.encode(tokenId)),
-            liquidityBefore - liquidityToDecrease,
-            "liquidity after decrease"
+            maker.getLiquidity(abi.encode(tokenId)), liquidityBefore - liquidityToDecrease, "liquidity after decrease"
         );
 
         assertEq(IERC20(token0).balanceOf(FEE_RECIPIENT) - feeRec0Before, 0, "no collect fee on decrease");
@@ -531,7 +530,7 @@ contract UniswapV3MarketMakerProtocolForkTest is Test {
         });
         uint256 owner0BeforeSecondClaim = IERC20(token0).balanceOf(address(this));
         uint256 owner1BeforeSecondClaim = IERC20(token1).balanceOf(address(this));
-        maker.claimAMMFees(abi.encode(collectParams));
+        maker.claimMarketMakerFees(abi.encode(collectParams));
         assertEq(IERC20(token0).balanceOf(address(this)), owner0BeforeSecondClaim, "no fees left after full decrease");
         assertEq(IERC20(token1).balanceOf(address(this)), owner1BeforeSecondClaim, "no fees left after full decrease");
     }
@@ -571,7 +570,7 @@ contract UniswapV3MarketMakerProtocolForkTest is Test {
         INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
             tokenId: tokenId, recipient: address(this), amount0Max: type(uint128).max, amount1Max: type(uint128).max
         });
-        maker.claimAMMFees(abi.encode(collectParams));
+        maker.claimMarketMakerFees(abi.encode(collectParams));
 
         assertEq(IERC20(token0).balanceOf(address(this)), owner0Before, "no token0 fees left after partial decrease");
         assertEq(IERC20(token1).balanceOf(address(this)), owner1Before, "no token1 fees left after partial decrease");
@@ -612,7 +611,7 @@ contract UniswapV3MarketMakerProtocolForkTest is Test {
         address token1 = mainnet.WETH < mainnet.USDC ? mainnet.USDC : mainnet.WETH;
         _swapOnPoolToAccruePositionFees(token0, token1);
 
-        maker.claimAMMFees(
+        maker.claimMarketMakerFees(
             abi.encode(
                 INonfungiblePositionManager.CollectParams({
                     tokenId: tokenId,
@@ -698,7 +697,7 @@ contract UniswapV3MarketMakerProtocolForkTest is Test {
         uint256 feeRec0AfterDecrease = IERC20(token0).balanceOf(FEE_RECIPIENT);
         uint256 feeRec1AfterDecrease = IERC20(token1).balanceOf(FEE_RECIPIENT);
 
-        maker.claimAMMFees(
+        maker.claimMarketMakerFees(
             abi.encode(
                 INonfungiblePositionManager.CollectParams({
                     tokenId: tokenId,

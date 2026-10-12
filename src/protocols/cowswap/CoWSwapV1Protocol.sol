@@ -240,7 +240,7 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
         if (order.kind != GPv2Order.KIND_SELL) return INVALID;
         if (order.partiallyFillable) return INVALID;
         if (order.sellTokenBalance != GPv2Order.BALANCE_ERC20) return INVALID;
-        if (order.buyTokenBalance != GPv2Order.BALANCE_ERC20) return INVALID;        
+        if (order.buyTokenBalance != GPv2Order.BALANCE_ERC20) return INVALID;
         if (block.timestamp < p.startTime + partIndex * p.partDuration) return INVALID;
         if (order.validTo < block.timestamp) return INVALID;
 

@@ -65,16 +65,14 @@ contract UniswapUniversalTradeProtocolRobinhoodForkTest is Test {
         StubGuard guard = new StubGuard();
         guard.set(robinhood.USDG, ASSET_STABLE_COIN);
         adapter = UniswapUniversalTradeProtocol(
-            payable(
-                TestProxy.deploy(
+            payable(TestProxy.deploy(
                     address(
                         new UniswapUniversalTradeProtocol(
                             robinhood.UNISWAP_UNIVERSAL_ROUTER, robinhood.PERMIT2, address(guard)
                         )
                     ),
                     address(this)
-                )
-            )
+                ))
         );
     }
 

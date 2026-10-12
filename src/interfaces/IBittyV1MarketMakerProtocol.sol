@@ -13,14 +13,14 @@ import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
  */
 interface IBittyV1MarketMakerProtocol is IBittyV1Protocol {
     /**
-     * @notice Add liquidity to the AMM protocol.
+     * @notice Add liquidity to the pool this adapter market-makes in.
      * @param data The data for the add liquidity.
      * @dev Gated by the host; this adapter does not check who is calling.
      */
     function addLiquidity(bytes memory data) external;
 
     /**
-     * @notice Remove all liquidity from the AMM protocol and claim accrued fees.
+     * @notice Remove all liquidity from the position and claim accrued fees.
      * @dev Claims accrued fees (with collect fee to FEE_RECIPIENT), then removes the full position liquidity.
      * @param data The data for the remove liquidity.
      * @dev Gated by the host; this adapter does not check who is calling.
@@ -28,22 +28,27 @@ interface IBittyV1MarketMakerProtocol is IBittyV1Protocol {
     function removeLiquidity(bytes memory data) external;
 
     /**
-     * @notice Decrease liquidity from the AMM protocol and collect the decreased tokens.
-     * @dev Partial decreases collect principal only. A full-position decrease also claims accrued AMM fees (with collect fee).
+     * @notice Decrease liquidity in the position and collect the decreased tokens.
+     * @dev Partial decreases collect principal only. A full-position decrease also claims accrued pool fees (with collect fee).
      * @param data The data for the decrease liquidity.
      * @dev Gated by the host; this adapter does not check who is calling.
      */
     function decreaseLiquidity(bytes memory data) external;
 
     /**
-     * @notice Claim fees from the AMM protocol.
+     * @notice Claim the fees the position has accrued.
      * @param data The data for the claim fees.
      * @dev Gated by the host; this adapter does not check who is calling.
+     *
+     *      Named for the role rather than for AMMs in general, because an AMM adapter is now two
+     *      things: a market-maker that holds liquidity and earns these fees, and a market-trade
+     *      adapter that only swaps and has no position to claim from. See `PERM_MARKET_MAKER` and
+     *      `PERM_MARKET_TRADE` on the vault.
      */
-    function claimAMMFees(bytes memory data) external;
+    function claimMarketMakerFees(bytes memory data) external;
 
     /**
-     * @notice Get the liquidity of the AMM protocol.
+     * @notice Get the liquidity this adapter holds.
      * @param data The data for the get liquidity.
      * @dev Gated by the host; this adapter does not check who is calling.
      */
