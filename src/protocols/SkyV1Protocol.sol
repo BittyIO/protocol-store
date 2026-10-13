@@ -34,7 +34,7 @@ contract SkyV1Protocol is IBittyV1Yield, BittyV1ProtocolBase {
     }
 
     function protocolVersion() external pure override returns (uint256) {
-        return 1_000_000; // 1.0.0
+        return 1_000_001; // 1.0.1
     }
 
     function deposit(address asset, uint256 amount) external override onlyOwner {
@@ -66,7 +66,7 @@ contract SkyV1Protocol is IBittyV1Yield, BittyV1ProtocolBase {
         uint256 shares = sUsds.balanceOf(owner());
         if (shares == 0) return 0;
         uint256 usdsValue = sUsds.convertToAssets(shares);
-        return usdsValue / GEM_CONVERSION_FACTOR;
+        return usdsValue * WAD / (GEM_CONVERSION_FACTOR * (WAD + psm.tout()));
     }
 
     function withdraw(address asset, uint256 amount, address recipient)

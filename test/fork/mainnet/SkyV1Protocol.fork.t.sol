@@ -145,6 +145,36 @@ contract TestSkyV1ProtocolFork is Test {
         assertApproxEqAbs(usdc.balanceOf(address(this)) - usdcBefore, STAKE_AMOUNT, STAKE_AMOUNT / 100);
     }
 
+    /**
+     * The reported balance must be an amount {withdraw} can actually deliver (audit L-04).
+     *
+     * This test used to assert the opposite: with a toll set, `getBalance` reported the GROSS value
+     * and `withdraw(getBalance())` reverted, because the non-max branch adds `tout` on top and rounds
+     * `previewWithdraw` up — so it asked for more sUSDS than the holder had. The "withdraw everything"
+     * form was the documented way round it. That made the view a promise the adapter would not keep,
+     * and the host trusts it: it checks `getBalance() >= amount` and then asks for exactly that.
+     *
+     * `getBalance` now reports net of the toll, so the two agree.
+     */
+    function test_Unstake_WithTout_TheReportedBalanceIsWithdrawable() public {
+        deal(mainnet.USDC, address(this), STAKE_AMOUNT);
+        usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
+        skyProtocol.deposit(mainnet.USDC, STAKE_AMOUNT);
+
+        IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
+        vm.mockCall(mainnet.SKY_PSM, abi.encodeWithSelector(IDssPsm.tout.selector), abi.encode(uint256(1e15)));
+
+        uint256 reported = skyProtocol.getBalance(mainnet.USDC);
+        assertGt(reported, 0, "there is a position to empty");
+        uint256 before = usdc.balanceOf(address(this));
+
+        skyProtocol.withdraw(mainnet.USDC, reported, address(this));
+
+        assertEq(usdc.balanceOf(address(this)) - before, reported, "delivered exactly what was reported");
+        assertLt(skyProtocol.getBalance(mainnet.USDC), reported / 100, "and the position is emptied");
+    }
+
+    /// The "withdraw everything" form still works with a toll, and agrees with the reported balance.
     function test_UnstakeMax_FullExit_WithTout() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
         usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
@@ -153,12 +183,15 @@ contract TestSkyV1ProtocolFork is Test {
         IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
         vm.mockCall(mainnet.SKY_PSM, abi.encodeWithSelector(IDssPsm.tout.selector), abi.encode(uint256(1e15)));
 
-        uint256 gross = skyProtocol.getBalance(mainnet.USDC);
-        vm.expectRevert();
-        skyProtocol.withdraw(mainnet.USDC, gross, address(this));
+        uint256 reported = skyProtocol.getBalance(mainnet.USDC);
+        uint256 before = usdc.balanceOf(address(this));
 
         skyProtocol.withdraw(mainnet.USDC, type(uint256).max, address(this));
+
         assertEq(sUsds.balanceOf(address(this)), 0, "full exit works with a non-zero PSM toll");
+        assertApproxEqRel(
+            usdc.balanceOf(address(this)) - before, reported, 1e15, "and matches what getBalance promised"
+        );
     }
 
     function test_Unstake_RevertOnWrongAsset() public {
