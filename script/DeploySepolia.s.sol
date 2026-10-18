@@ -7,7 +7,6 @@ contract DeploySepolia is DeployProtocols {
     function deploy() public override {
         _deployAave();
         _deployUniswapUniversal();
-        _deployUniswapV3Maker();
         _deployCoWSwap();
         _deployLido();
     }

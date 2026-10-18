@@ -41,9 +41,9 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
 
     // Fee-bearing appData a limit order must carry (0.2% partner fee to PARTNER_FEE_RECIPIENT). The
     // off-chain layer posts the byte-identical fullAppData to the CoW API so solvers apply the fee.
-    // keccak256('{"appCode":"BittyVault","metadata":{"partnerFee":{"bps":20,"recipient":"0x12EE2de7BF086388B1D560eb95e7191Edfab9823"}},"version":"1.3.0"}')
-    bytes32 public constant APP_DATA = 0xdd81467643ffa93587d2dcaa8d583d5d953920b659e6c8f7235c8d613f737693;
-    address public constant PARTNER_FEE_RECIPIENT = 0x12EE2de7BF086388B1D560eb95e7191Edfab9823;
+    // keccak256('{"appCode":"BittyVault","metadata":{"partnerFee":{"bps":20,"recipient":"0x5837C8F4963F694C59e53445C070acb266187bF1"}},"version":"1.3.0"}')
+    bytes32 public constant APP_DATA = 0xf43450c5a8bc062461a722cf507778a7c90acdf5c7e9b9e10163f2e2dc6e9b45;
+    address public constant PARTNER_FEE_RECIPIENT = 0x5837C8F4963F694C59e53445C070acb266187bF1;
 
     // Fee-bearing appData for TWAP part orders, split around a per-schedule salt placed in the free-form
     // `environment` field. The partnerFee block is identical to APP_DATA's, so a TWAP part carries the same
@@ -52,7 +52,7 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
     // clone recomputes twapAppData(salt) and requires the signed order to carry exactly that.
     string private constant TWAP_APP_DATA_PREFIX = '{"appCode":"BittyVault","environment":"';
     string private constant TWAP_APP_DATA_SUFFIX =
-        '","metadata":{"partnerFee":{"bps":20,"recipient":"0x12EE2de7BF086388B1D560eb95e7191Edfab9823"}},"version":"1.3.0"}';
+        '","metadata":{"partnerFee":{"bps":20,"recipient":"0x5837C8F4963F694C59e53445C070acb266187bF1"}},"version":"1.3.0"}';
 
     // EIP-712 type hash for CoW's batch order cancellation, signed off-chain to soft-cancel orders.
     bytes32 private constant CANCELLATIONS_TYPE_HASH = keccak256("OrderCancellations(bytes[] orderUids)");
@@ -94,7 +94,7 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
     }
 
     function protocolVersion() external pure override returns (uint256) {
-        return 1_000_001; // 1.0.1
+        return 1_000_000; // 1.0.0
     }
 
     /**

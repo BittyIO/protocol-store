@@ -14,7 +14,6 @@ library mainnet {
     // Uniswap V3 Protocol
     address public constant POOL_MANAGER = 0x000000000004444c5dc75cB358380D2e3dE08A90;
     address public constant UNISWAP_V3_ROUTER = 0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45;
-    address public constant UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
     // Universal Router (v3 + v4) and v4 core, from developers.uniswap.org (v4 deployments).
     address public constant UNISWAP_UNIVERSAL_ROUTER = 0x23617e59A5925b2A4Bf75d73ff6711cD0b29De85; // 2.1.2
     address public constant UNISWAP_V4_POOL_MANAGER = 0x000000000004444c5dc75cB358380D2e3dE08A90;
@@ -34,7 +33,7 @@ library mainnet {
     address public constant COW_SETTLEMENT = 0x9008D19f58AAbD9eD0D60971565AA8510560ab41;
     address public constant COW_VAULT_RELAYER = 0xC92E8bdf79f0507f65a392b0ab4667716BFE0110;
 
-    address public constant BITTY_GUARD = 0x00006Dc0000DBB00d9bd462ad2005E20007e0Dc7;
+    address public constant BITTY_GUARD = 0x000000000F5fcD35885BfE4c700042cE7cb39554;
 }
 
 /// @dev Sepolia addresses parallel to `mainnet` for fork tests on Sepolia.
@@ -53,7 +52,6 @@ library sepolia {
 
     address public constant POOL_MANAGER = 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543;
     address public constant UNISWAP_V3_ROUTER = 0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E;
-    address public constant UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER = 0x1238536071E1c677A632429e3655c799b22cDA52;
     // Universal Router (v3 + v4) + canonical Permit2, mirroring deployments/sepolia.toml.
     address public constant UNISWAP_UNIVERSAL_ROUTER = 0x7E4f6c5e954Da5c61B3423D81E2277431Ac043f3;
     address public constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
@@ -65,7 +63,7 @@ library sepolia {
     address public constant COW_SETTLEMENT = 0x9008D19f58AAbD9eD0D60971565AA8510560ab41;
     address public constant COW_VAULT_RELAYER = 0xC92E8bdf79f0507f65a392b0ab4667716BFE0110;
 
-    address public constant BITTY_GUARD = 0x00006Dc0000DBB00d9bd462ad2005E20007e0Dc7;
+    address public constant BITTY_GUARD = 0x000000000F5fcD35885BfE4c700042cE7cb39554;
 }
 
 /// @dev Robinhood Chain (chain 4663) addresses. Uniswap V3 is the only supported venue so far.
@@ -77,7 +75,6 @@ library robinhood {
     // Uniswap V3 Protocol
     address public constant UNISWAP_V3_FACTORY = 0x1f7d7550B1b028f7571E69A784071F0205FD2EfA;
     address public constant UNISWAP_V3_ROUTER = 0xCaf681a66D020601342297493863E78C959E5cb2;
-    address public constant UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER = 0x73991a25C818Bf1f1128dEAaB1492D45638DE0D3;
     address public constant UNISWAP_V3_QUOTER_V2 = 0x33e885eD0Ec9bF04EcfB19341582aADCb4c8A9E7;
     // Universal Router (v3 + v4) and v4 core, from developers.uniswap.org (v4 deployments).
     address public constant UNISWAP_UNIVERSAL_ROUTER = 0x204FAca1764B154221e35c0d20aBb3c525710498; // 2.1.2
@@ -85,7 +82,7 @@ library robinhood {
     address public constant UNISWAP_V4_STATE_VIEW = 0xF3334192D15450CdD385c8B70e03f9A6bD9E673b;
     address public constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
 
-    address public constant BITTY_GUARD = 0x00006Dc0000DBB00d9bd462ad2005E20007e0Dc7;
+    address public constant BITTY_GUARD = 0x000000000F5fcD35885BfE4c700042cE7cb39554;
 }
 
 /// @dev Base (chain 8453) addresses used by fork tests in `test/fork/base/`.
@@ -102,7 +99,6 @@ library base {
 
     // Uniswap V3 Protocol
     address public constant UNISWAP_V3_ROUTER = 0x2626664c2603336E57B271c5C0b26F421741e481;
-    address public constant UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER = 0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1;
 
     // CoW Swap. Deployed deterministically, so identical to mainnet.
     address public constant COW_SETTLEMENT = 0x9008D19f58AAbD9eD0D60971565AA8510560ab41;
@@ -113,4 +109,32 @@ library base {
     address public constant USDS = 0x820C137fa70C8691f0e44Dc420a5e53c168921Dc;
     address public constant S_USDS = 0x5875eEE11Cf8398102FdAd704C9E96607675467a;
     address public constant SKY_PSM3 = 0x1601843c5E9bC251A3272907010AFa41Fa18347E;
+}
+
+/// @dev Arbitrum One (chain 42161) addresses used by fork tests in `test/fork/arbitrum/`.
+library arbitrum {
+    address public constant WETH = 0x82aF49447D8a07e3bd95BD0d56f35241523fBab1;
+    address public constant USDC = 0xaf88d065e77c8cC2239327C5EDb3A432268e5831; // native, not bridged USDC.e
+    address public constant USDT = 0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9; // USDT0
+    address public constant WBTC = 0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f;
+
+    // Aave V3 Protocol. AAVE_V3 is the PoolAddressesProvider, which the adapter asks for the pool;
+    // POOL_DATA_PROVIDER derived on chain from AAVE_V3.getPoolDataProvider().
+    address public constant AAVE_V3 = 0xa97684ead0e402dC232d5A977953DF7ECBaB3CDb;
+    address public constant POOL_DATA_PROVIDER = 0x243Aa95cAC2a25651eda86e80bEe66114413c43b;
+
+    // Uniswap Universal Router v2.1.2: the build mainnet and Base also use.
+    address public constant UNISWAP_UNIVERSAL_ROUTER = 0x2d01411773c8C24805306E89A41F7855C3c4Fe65;
+    address public constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+
+    // CoW Swap. Deployed deterministically, so identical to mainnet.
+    address public constant COW_SETTLEMENT = 0x9008D19f58AAbD9eD0D60971565AA8510560ab41;
+    address public constant COW_VAULT_RELAYER = 0xC92E8bdf79f0507f65a392b0ab4667716BFE0110;
+
+    // Sky, through one PSM3 module as on Base: sUSDS is a plain ERC-20 here.
+    address public constant USDS = 0x6491c05A82219b8D1479057361ff1654749b876b;
+    address public constant S_USDS = 0xdDb46999F8891663a8F2828d25298f70416d7610;
+    address public constant SKY_PSM3 = 0x2B05F8e1cACC6974fD79A673a341Fe1f58d27266;
+
+    address public constant BITTY_GUARD = 0x000000000F5fcD35885BfE4c700042cE7cb39554;
 }

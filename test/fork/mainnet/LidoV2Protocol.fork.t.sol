@@ -201,14 +201,14 @@ contract TestLidoProtocolFork is Test {
         protocol.deposit(address(weth), principal);
 
         uint256 wethBefore = weth.balanceOf(address(this));
-        uint256 feeRecipientBefore = weth.balanceOf(0x12EE2de7BF086388B1D560eb95e7191Edfab9823);
+        uint256 feeRecipientBefore = weth.balanceOf(0x5837C8F4963F694C59e53445C070acb266187bF1);
 
         uint256[] memory requestIds = new uint256[](1);
         requestIds[0] = 1;
         protocol.claimWithdrawals(requestIds);
 
         // Yield fee removed: the entire claimed amount goes to the caller, nothing to the old fee recipient.
-        assertEq(weth.balanceOf(0x12EE2de7BF086388B1D560eb95e7191Edfab9823), feeRecipientBefore, "no yield fee taken");
+        assertEq(weth.balanceOf(0x5837C8F4963F694C59e53445C070acb266187bF1), feeRecipientBefore, "no yield fee taken");
         assertEq(weth.balanceOf(address(this)), wethBefore + claimAmount, "caller receives full claim");
     }
 

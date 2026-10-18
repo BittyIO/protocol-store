@@ -231,7 +231,7 @@ contract TestSkyV1ProtocolFork is Test {
 
         IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
 
-        address feeRecipient = 0x12EE2de7BF086388B1D560eb95e7191Edfab9823;
+        address feeRecipient = 0x5837C8F4963F694C59e53445C070acb266187bF1;
         uint256 feeBefore = usdc.balanceOf(feeRecipient);
         uint256 usdcBefore = usdc.balanceOf(address(this));
 
@@ -240,5 +240,23 @@ contract TestSkyV1ProtocolFork is Test {
         // Yield fee removed: nothing goes to the old fee recipient; the caller receives the full redeemed amount.
         assertEq(usdc.balanceOf(feeRecipient), feeBefore, "no yield fee taken");
         assertApproxEqAbs(usdc.balanceOf(address(this)) - usdcBefore, gross, STAKE_AMOUNT / 100);
+    }
+
+    /// Shares are minted to the owner and the PSM pays the recipient: nothing passes through here.
+    function test_DepositAndWithdraw_NothingPassesThroughTheInstance() public {
+        address payee = makeAddr("payee");
+        deal(mainnet.USDC, address(this), STAKE_AMOUNT);
+        usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
+        skyProtocol.deposit(mainnet.USDC, STAKE_AMOUNT);
+        assertEq(IERC20(address(sUsds)).balanceOf(address(skyProtocol)), 0, "no shares held here");
+        assertGt(IERC20(address(sUsds)).balanceOf(address(this)), 0, "the owner holds them");
+
+        IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
+        uint256 delivered = skyProtocol.withdraw(mainnet.USDC, 400e6, payee);
+
+        assertEq(delivered, 400e6);
+        assertEq(usdc.balanceOf(payee), 400e6, "the payee was paid exactly");
+        assertEq(usdc.balanceOf(address(skyProtocol)), 0, "no USDC stuck here");
+        assertEq(usds.balanceOf(address(skyProtocol)), 0, "no USDS stuck here");
     }
 }

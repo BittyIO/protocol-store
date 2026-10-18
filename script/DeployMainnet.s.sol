@@ -5,11 +5,10 @@ import {DeployProtocols} from "./DeployProtocols.sol";
 
 contract DeployMainnet is DeployProtocols {
     function deploy() public override {
-        //_deployAave();
+        _deployAave();
         _deployUniswapUniversal();
-        _deployUniswapV3Maker();
-        //_deployCoWSwap();
-        //_deployLido();
-        //_deploySky();
+        _deployCoWSwap();
+        _deployLido();
+        _deploySky();
     }
 }

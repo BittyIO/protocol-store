@@ -41,15 +41,10 @@ contract AaveV3Protocol is IBittyV1Yield, BittyV1ProtocolBase {
         if (IERC20(asset).allowance(address(this), address(pool)) < amount) {
             IERC20(asset).forceApprove(address(pool), type(uint256).max);
         }
-        pool.supply(asset, amount, address(this), 0);
+        pool.supply(asset, amount, msg.sender, 0);
 
-        address aToken = _getAToken(asset);
         if (receiptTokenOf[asset] == address(0)) {
-            receiptTokenOf[asset] = aToken;
-        }
-        uint256 aTokenBalance = IERC20(aToken).balanceOf(address(this));
-        if (aTokenBalance > 0) {
-            IERC20(aToken).safeTransfer(msg.sender, aTokenBalance);
+            receiptTokenOf[asset] = _getAToken(asset);
         }
     }
 
@@ -65,8 +60,7 @@ contract AaveV3Protocol is IBittyV1Yield, BittyV1ProtocolBase {
         }
         uint256 transferAmount = amount == type(uint256).max ? IERC20(aToken).balanceOf(msg.sender) : amount;
         IERC20(aToken).safeTransferFrom(msg.sender, address(this), transferAmount);
-        delivered = IAaveV3(aaveV3).getPool().withdraw(asset, amount, address(this));
-        IERC20(asset).safeTransfer(recipient, delivered);
+        delivered = IAaveV3(aaveV3).getPool().withdraw(asset, amount, recipient);
     }
 
     function getBalance(address asset) external view override returns (uint256) {

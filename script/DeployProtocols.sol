@@ -4,7 +4,6 @@ pragma solidity ^0.8.34;
 import {console2} from "forge-std/console2.sol";
 import {AaveV3Protocol} from "../src/protocols/AaveV3Protocol.sol";
 import {UniswapUniversalTradeProtocol} from "../src/protocols/UniswapUniversalTradeProtocol.sol";
-import {UniswapV3MarketMakerProtocol} from "../src/protocols/UniswapV3MarketMakerProtocol.sol";
 import {LidoV2Protocol} from "../src/protocols/LidoV2Protocol.sol";
 import {SkyV1Protocol} from "../src/protocols/SkyV1Protocol.sol";
 import {SkyV1EvmProtocol} from "../src/protocols/SkyV1EvmProtocol.sol";
@@ -89,15 +88,6 @@ abstract contract DeployProtocols is DeployScript {
             "UniswapUniversalTradeProtocol",
             "UNISWAP_TRADE_PROTOCOL",
             address(new UniswapUniversalTradeProtocol(universal, permit2, guard))
-        );
-    }
-
-    function _deployUniswapV3Maker() internal {
-        address npm = getAddress("UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER");
-        bytes memory initCode = abi.encodePacked(type(UniswapV3MarketMakerProtocol).creationCode, abi.encode(npm));
-        if (_reuse("UniswapV3MarketMakerProtocol", "UNISWAP_V3_MAKER_PROTOCOL", initCode) != address(0)) return;
-        _record(
-            "UniswapV3MarketMakerProtocol", "UNISWAP_V3_MAKER_PROTOCOL", address(new UniswapV3MarketMakerProtocol(npm))
         );
     }
 

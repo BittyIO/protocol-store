@@ -125,5 +125,32 @@ contract TestAaveProtocolFork is Test {
         uint256 usdcBalance = aaveProtocol.getBalance(address(mainnet.USDC));
         assertApproxEqAbs(usdcBalance, 1000e6, 10);
     }
+
+    /// Supplied on the owner's behalf: the aTokens are minted to the owner, never held here.
+    function test_Supply_MintsTheReceiptStraightToTheOwner() public {
+        deal(address(mainnet.WETH), address(this), 1 ether);
+        IERC20(address(mainnet.WETH)).forceApprove(address(aaveProtocol), 1 ether);
+        aaveProtocol.deposit(address(mainnet.WETH), 1 ether);
+
+        address aToken = aaveProtocol.receiptTokenOf(address(mainnet.WETH));
+        assertTrue(aToken != address(0), "the receipt token is recorded");
+        assertEq(IERC20(aToken).balanceOf(address(aaveProtocol)), 0, "nothing held by the instance");
+        assertApproxEqAbs(IERC20(aToken).balanceOf(address(this)), 1 ether, 10);
+    }
+
+    /// Paid out by Aave to the recipient directly, with nothing passing through the instance.
+    function test_Withdraw_PaysTheRecipientDirectly() public {
+        address payee = makeAddr("payee");
+        deal(address(mainnet.WETH), address(this), 1 ether);
+        IERC20(address(mainnet.WETH)).forceApprove(address(aaveProtocol), 1 ether);
+        aaveProtocol.deposit(address(mainnet.WETH), 1 ether);
+        IERC20(aaveProtocol.receiptTokenOf(address(mainnet.WETH))).forceApprove(address(aaveProtocol), 0.5 ether);
+
+        uint256 delivered = aaveProtocol.withdraw(address(mainnet.WETH), 0.5 ether, payee);
+
+        assertEq(delivered, 0.5 ether);
+        assertEq(IERC20(address(mainnet.WETH)).balanceOf(payee), 0.5 ether, "the payee was paid");
+        assertEq(IERC20(address(mainnet.WETH)).balanceOf(address(aaveProtocol)), 0, "nothing stuck here");
+    }
 }
 

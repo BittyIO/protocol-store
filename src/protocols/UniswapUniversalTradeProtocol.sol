@@ -14,10 +14,9 @@ error NotAUniversalRoute();
 
 /**
  * @title UniswapUniversalTradeProtocol
- * @notice The market-trade (swap) half of the AMM split. Version-agnostic: a route is opaque to the
- *         adapter, so one adapter reaches every pool version the Universal Router can — v2, v3 and v4,
- *         and a route that splits across them. That is the whole point of splitting swaps away from the
- *         per-version market-maker adapters.
+ * @notice Market trades (swaps). Version-agnostic: a route is opaque to the adapter, so one adapter
+ *         reaches every pool version the Universal Router can — v2, v3 and v4, and a route that splits
+ *         across them.
  *
  *         The `path` slot of `data` is always a Universal Router route, {UniversalRoute}-tagged:
  *         TAG ‖ abi.encode(commands, inputs, deadline) — v2, v3, v4, or any mix, since the router decodes
@@ -35,7 +34,7 @@ error NotAUniversalRoute();
 contract UniswapUniversalTradeProtocol is IBittyV1MarketTradeProtocol, BittyV1ProtocolBase {
     using SafeERC20 for IERC20;
 
-    address public constant FEE_RECIPIENT = 0x12EE2de7BF086388B1D560eb95e7191Edfab9823;
+    address public constant FEE_RECIPIENT = 0x5837C8F4963F694C59e53445C070acb266187bF1;
     uint256 private constant SWAP_FEE_BPS = 20; // 0.2% market-swap fee
 
     address public immutable universalRouter; // the one router that reaches v2, v3 and v4

@@ -34,7 +34,7 @@ contract SkyV1Protocol is IBittyV1Yield, BittyV1ProtocolBase {
     }
 
     function protocolVersion() external pure override returns (uint256) {
-        return 1_000_001; // 1.0.1
+        return 1_000_000; // 1.0.0
     }
 
     function deposit(address asset, uint256 amount) external override onlyOwner {
@@ -50,14 +50,11 @@ contract SkyV1Protocol is IBittyV1Yield, BittyV1ProtocolBase {
         if (usds.allowance(address(this), address(sUsds)) < usdsReceived) {
             usds.forceApprove(address(sUsds), type(uint256).max);
         }
-        sUsds.deposit(usdsReceived, address(this));
+
+        sUsds.deposit(usdsReceived, msg.sender);
 
         if (receiptTokenOf[asset] == address(0)) {
             receiptTokenOf[asset] = address(sUsds);
-        }
-        uint256 shares = sUsds.balanceOf(address(this));
-        if (shares > 0) {
-            IERC20(address(sUsds)).safeTransfer(msg.sender, shares);
         }
     }
 
@@ -78,8 +75,6 @@ contract SkyV1Protocol is IBittyV1Yield, BittyV1ProtocolBase {
         if (asset != address(usdc)) revert InvalidAsset();
 
         uint256 tout = psm.tout();
-        uint256 usdcBefore;
-        uint256 gross;
 
         if (amount == type(uint256).max) {
             uint256 shares = sUsds.balanceOf(msg.sender);
@@ -92,14 +87,12 @@ contract SkyV1Protocol is IBittyV1Yield, BittyV1ProtocolBase {
             if (usds.allowance(address(this), address(psm)) < usdsAvailable) {
                 usds.forceApprove(address(psm), type(uint256).max);
             }
-            usdcBefore = usdc.balanceOf(address(this));
-            psm.buyGem(address(this), amount);
-            gross = usdc.balanceOf(address(this)) - usdcBefore;
+
+            psm.buyGem(recipient, amount);
 
             uint256 dust = usds.balanceOf(address(this));
             if (dust > 0) usds.safeTransfer(msg.sender, dust);
-            usdc.safeTransfer(recipient, gross);
-            return gross;
+            return amount;
         }
 
         uint256 usdsNeeded = amount * GEM_CONVERSION_FACTOR;
@@ -115,11 +108,8 @@ contract SkyV1Protocol is IBittyV1Yield, BittyV1ProtocolBase {
         if (usds.allowance(address(this), address(psm)) < usdsNeeded) {
             usds.forceApprove(address(psm), type(uint256).max);
         }
-        usdcBefore = usdc.balanceOf(address(this));
-        psm.buyGem(address(this), amount);
-        gross = usdc.balanceOf(address(this)) - usdcBefore;
-        usdc.safeTransfer(recipient, gross);
-        return gross;
+        psm.buyGem(recipient, amount);
+        return amount;
     }
 
     function getPendingWithdrawalIds() external pure override returns (uint256[] memory) {

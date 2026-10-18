@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity ^0.8.34;
+
+import {DeployProtocols} from "./DeployProtocols.sol";
+
+contract DeployArbitrum is DeployProtocols {
+    function deploy() public override {
+        _deployAave();
+        _deployUniswapUniversal();
+        _deployCoWSwap();
+        _deploySkyEvm();
+    }
+}

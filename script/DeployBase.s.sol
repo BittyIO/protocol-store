@@ -5,10 +5,9 @@ import {DeployProtocols} from "./DeployProtocols.sol";
 
 contract DeployBase is DeployProtocols {
     function deploy() public override {
-        //_deployAave();
+        _deployAave();
         _deployUniswapUniversal();
-        _deployUniswapV3Maker();
-        //_deployCoWSwap();
-        //_deploySkyEvm();
+        _deployCoWSwap();
+        _deploySkyEvm();
     }
 }

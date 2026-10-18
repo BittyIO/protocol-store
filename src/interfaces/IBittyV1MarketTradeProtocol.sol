@@ -7,9 +7,7 @@ import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
  * @title IBittyV1MarketTradeProtocol
  * @notice Immediate (market) swaps: exact-in and exact-out, routed by the adapter. Stateless — the
  *         adapter holds no position between calls, so a single router adapter can serve every pool
- *         version at once. The stateful, per-version side of an AMM (concentrated liquidity) lives in
- *         {IBittyV1MarketMakerProtocol}; the split is what lets one trade adapter and many maker
- *         adapters be curated independently.
+ *         version at once.
  */
 interface IBittyV1MarketTradeProtocol is IBittyV1Protocol {
     /**
