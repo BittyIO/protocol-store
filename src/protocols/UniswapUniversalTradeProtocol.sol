@@ -34,7 +34,8 @@ error NotAUniversalRoute();
 contract UniswapUniversalTradeProtocol is IBittyV1MarketTradeProtocol, BittyV1ProtocolBase {
     using SafeERC20 for IERC20;
 
-    address public constant FEE_RECIPIENT = 0x5837C8F4963F694C59e53445C070acb266187bF1;
+    // The fee Safe's own Bitty vault, so fees land under its locks and whitelist.
+    address public constant FEE_RECIPIENT = 0xF0E7f6998B362BD15CF819C7EBfcaCe8865FECA0;
     uint256 private constant SWAP_FEE_BPS = 20; // 0.2% market-swap fee
 
     address public immutable universalRouter; // the one router that reaches v2, v3 and v4
@@ -52,7 +53,7 @@ contract UniswapUniversalTradeProtocol is IBittyV1MarketTradeProtocol, BittyV1Pr
     }
 
     function protocolVersion() external pure override returns (uint256) {
-        return 1_000_000; // 1.0.0
+        return 1_000_001; // 1.0.1: fee to the fee Safe's vault
     }
 
     receive() external payable {}

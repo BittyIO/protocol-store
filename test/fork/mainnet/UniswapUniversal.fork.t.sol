@@ -47,7 +47,7 @@ contract UniswapUniversalForkTest is Test {
     // The router's "whoever called me" recipient: output lands on the adapter, as it must.
     address constant MSG_SENDER = address(1);
 
-    address constant FEE_RECIPIENT = 0x5837C8F4963F694C59e53445C070acb266187bF1;
+    address constant FEE_RECIPIENT = 0xF0E7f6998B362BD15CF819C7EBfcaCe8865FECA0;
     uint256 constant SWAP_FEE_BPS = 20;
 
     struct PoolKey {

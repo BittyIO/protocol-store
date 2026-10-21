@@ -231,7 +231,7 @@ contract TestSkyV1ProtocolFork is Test {
 
         IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
 
-        address feeRecipient = 0x5837C8F4963F694C59e53445C070acb266187bF1;
+        address feeRecipient = 0xF0E7f6998B362BD15CF819C7EBfcaCe8865FECA0;
         uint256 feeBefore = usdc.balanceOf(feeRecipient);
         uint256 usdcBefore = usdc.balanceOf(address(this));
 

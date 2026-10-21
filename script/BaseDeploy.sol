@@ -5,6 +5,7 @@ import {Script} from "forge-std/Script.sol";
 import {Config} from "forge-std/Config.sol";
 import {Variable, TypeKind} from "forge-std/LibVariable.sol";
 import {console2} from "forge-std/console2.sol";
+import {VmSafe} from "forge-std/Vm.sol";
 
 abstract contract DeployScript is Script, Config {
     string[] private _savedKeys;
@@ -77,7 +78,13 @@ abstract contract DeployScript is Script, Config {
     }
 
     /// @dev Runs after {vm-stopBroadcast}, so these calls are plain simulation and emit no transaction.
+    ///      Skipped on a dry run: its addresses exist only in the simulation, and writing them would
+    ///      leave the TOML pointing at contracts that were never deployed.
     function _flushSavedAddresses() private {
+        if (!vm.isContext(VmSafe.ForgeContext.ScriptBroadcast) && !vm.isContext(VmSafe.ForgeContext.ScriptResume)) {
+            console2.log("dry run: deployments TOML left unchanged");
+            return;
+        }
         for (uint256 i = 0; i < _savedKeys.length; i++) {
             config.set(_savedKeys[i], _savedValues[i]);
         }
