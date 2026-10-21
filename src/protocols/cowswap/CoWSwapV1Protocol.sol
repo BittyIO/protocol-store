@@ -8,6 +8,7 @@ import {IGPv2Settlement} from "../../libs/cow/IGPv2Settlement.sol";
 import {GPv2Order} from "../../libs/cow/GPv2Order.sol";
 import {IERC1271} from "../../libs/cow/IERC1271.sol";
 import {ECDSA} from "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
+import {SignatureChecker} from "openzeppelin-contracts/contracts/utils/cryptography/SignatureChecker.sol";
 import {Strings} from "openzeppelin-contracts/contracts/utils/Strings.sol";
 
 /**
@@ -19,13 +20,19 @@ import {Strings} from "openzeppelin-contracts/contracts/utils/Strings.sol";
  *         signingScheme=eip1271. At settlement CoW calls the vault's isValidSignature, which delegates to
  *         this clone's isValidSignature → validateOffchainOrder: it re-hashes the carried order under the
  *         settlement domain to bind it to the digest, checks the fee-bearing appData / receiver / shape,
- *         recovers the signature, and defers the allow/auth decision to the vault
+ *         identifies the signer ({_signerOf}), and defers the allow/auth decision to the vault
  *         (IBittyVaultOffchainAuth). Cancellation is off-chain (CoW API soft-cancel / order expiry).
  *
  *         Because nothing is reserved on-chain, an over-signed order simply fails validation at settlement
  *         once its backing balance is gone — no reservation, no leak, no cleanup.
  *
- *         Signer recovery below is secp256k1 ECDSA, which Shor's algorithm breaks. Left that way
+ *         The signer is either an EOA or a contract wallet (a Safe owning the vault, say). An EOA's
+ *         signature is the bare 65 bytes and its signer is RECOVERED, exactly as before. A contract
+ *         wallet has no single key to recover — a Safe's signature is its owners' signatures
+ *         concatenated — so it presents abi.encode(address signer, bytes signature) instead: the signer
+ *         is ASSERTED and checked with ERC-1271 against it. See {_signerOf}.
+ *
+ *         EOA recovery is secp256k1 ECDSA, which Shor's algorithm breaks. Left that way
  *         deliberately: CoW constrains only the ERC-1271 magic value, never the inner scheme, so a
  *         post-quantum move needs no groundwork here — ship a PQ protocol and let owners swap it in
  *         with updateProtocols(), or park this one in the guard's deprecated tier so in-flight orders
@@ -95,7 +102,7 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
     }
 
     function protocolVersion() external pure override returns (uint256) {
-        return 1_000_001; // 1.0.1: partner fee to the fee Safe's vault
+        return 1_000_002; // 1.0.2: contract-wallet (ERC-1271) signers, so a Safe-owned vault can trade
     }
 
     /**
@@ -125,7 +132,7 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
     /**
      * @notice Validate a gasless, off-chain-signed CoW order cancellation. `signature` is
      *         abi.encode(bytes[] orderUids, bytes signerSignature). The EIP-712 OrderCancellations digest
-     *         (under the settlement domain) must equal `hash`, and the recovered signer must be the vault's
+     *         (under the settlement domain) must equal `hash`, and the signer ({_signerOf}) must be the vault's
      *         host. Cancelling moves no funds, so no token/balance checks apply.
      */
     function validateOffchainCancellation(bytes32 hash, bytes calldata signature) external view returns (bytes4) {
@@ -139,8 +146,8 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
         bytes32 digest = keccak256(abi.encodePacked(hex"1901", settlement.domainSeparator(), structHash));
         if (digest != hash) return INVALID;
 
-        address signer = ECDSA.recover(hash, signerSig);
-        if (IBittyVaultOffchainAuth(owner()).isOffchainCancellationAuthorized(signer)) {
+        (address signer, bool ok) = _signerOf(hash, signerSig);
+        if (ok && IBittyVaultOffchainAuth(owner()).isOffchainCancellationAuthorized(signer)) {
             return MAGICVALUE;
         }
         return INVALID;
@@ -180,7 +187,7 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
      *          field changes the hash and fails;
      *       2. it must settle to the vault (receiver == owner()), carry the fee-bearing APP_DATA, be
      *          fill-or-kill ERC-20/ERC-20 with feeAmount 0, and not be expired;
-     *       3. the recovered signer must be authorized by the vault for this exact trade (a pure view, so
+     *       3. the signer ({_signerOf}) must be authorized by the vault for this exact trade (a pure view, so
      *          no reservation is written and nothing can leak).
      */
     function validateOffchainOrder(bytes32 hash, bytes calldata signature) external view returns (bytes4) {
@@ -197,10 +204,14 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
         if (order.buyTokenBalance != GPv2Order.BALANCE_ERC20) return INVALID;
         if (order.validTo < block.timestamp) return INVALID;
 
-        address signer = ECDSA.recover(hash, signerSig);
-        if (IBittyVaultOffchainAuth(owner())
-                .isOffchainOrderAuthorized(signer, address(order.sellToken), address(order.buyToken), order.sellAmount))
-        {
+        (address signer, bool ok) = _signerOf(hash, signerSig);
+        if (
+            ok
+                && IBittyVaultOffchainAuth(owner())
+                    .isOffchainOrderAuthorized(
+                        signer, address(order.sellToken), address(order.buyToken), order.sellAmount
+                    )
+        ) {
             return MAGICVALUE;
         }
         return INVALID;
@@ -220,9 +231,9 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
      *          (`block.timestamp >= startTime + partIndex * partDuration`), and it must not be expired
      *          (`validTo >= block.timestamp`). A GPv2 order carries no start time, so this check is what
      *          enforces one part per slot instead of letting every part settle from the moment of signing;
-     *       3. the signer recovered from the single `params` signature must be authorized for the trade.
+     *       3. the signer of the single `params` signature ({_signerOf}) must be authorized for the trade.
      *          That signature is over {twapDigest}, which includes THIS clone's vault, so a schedule
-     *          signed for another vault recovers a different signer here and fails authorization.
+     *          signed for another vault recovers a different signer (or fails ERC-1271) here and is rejected.
      */
     function validateOffchainTwapPart(bytes32 hash, bytes calldata signature) external view returns (bytes4) {
         (GPv2Order.Data memory order, TwapOrder memory p, uint256 partIndex, bytes memory signerSig) =
@@ -245,11 +256,42 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
         if (block.timestamp < p.startTime + partIndex * p.partDuration) return INVALID;
         if (order.validTo < block.timestamp) return INVALID;
 
-        address signer = ECDSA.recover(twapDigest(p), signerSig);
-        if (IBittyVaultOffchainAuth(owner())
-                .isOffchainOrderAuthorized(signer, p.sellToken, p.buyToken, order.sellAmount)) {
+        (address signer, bool ok) = _signerOf(twapDigest(p), signerSig);
+        if (
+            ok
+                && IBittyVaultOffchainAuth(owner())
+                    .isOffchainOrderAuthorized(signer, p.sellToken, p.buyToken, order.sellAmount)
+        ) {
             return MAGICVALUE;
         }
         return INVALID;
+    }
+
+    /**
+     * @dev Who signed `digest`, and whether that is proven.
+     *
+     *      A 65-byte `signerSig` is an EOA's: the signer is recovered, as every version before this one
+     *      did, so EOA orders are byte-for-byte unchanged. Anything else must be
+     *      abi.encode(address signer, bytes signature) from a contract wallet, and is accepted only if
+     *      `signer` answers ERC-1271 for `digest`. The two shapes cannot collide — the wrapped form is at
+     *      least 128 bytes — and a 1-of-1 Safe's signature, which is itself 65 bytes, recovers the Safe's
+     *      OWNER key rather than the Safe, so it fails authorization unless it is wrapped.
+     *
+     *      The wrapped branch is ERC-1271 ONLY, never ECDSA: asserting an EOA there would give the same
+     *      authorisation two encodings, and nothing needs that.
+     *
+     *      Contract signatures are revocable (a Safe can rotate owners or change threshold), so an order
+     *      a Safe signed can stop validating before it settles. That is the same outcome as an emptied
+     *      balance — the order simply fails at settlement — and needs no handling here.
+     */
+    function _signerOf(bytes32 digest, bytes memory signerSig) internal view returns (address signer, bool ok) {
+        if (signerSig.length == 65) {
+            ECDSA.RecoverError err;
+            (signer, err,) = ECDSA.tryRecover(digest, signerSig);
+            return (signer, err == ECDSA.RecoverError.NoError);
+        }
+        bytes memory inner;
+        (signer, inner) = abi.decode(signerSig, (address, bytes));
+        return (signer, SignatureChecker.isValidERC1271SignatureNow(signer, digest, inner));
     }
 }
