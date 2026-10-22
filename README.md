@@ -14,6 +14,7 @@ Adapters are **curated** — only addresses registered in the Bitty Guard may be
 | `SkyV1EvmProtocol` | Staking | USDC → sUSDS via PSM3 (single-hop) | Base |
 | `UniswapUniversalProtocol` | AMM | Market swaps through the Universal Router (v3 + v4 routes) or a plain v3 path; Uniswap V3 LP (mint, decrease, remove, fee claim) | Mainnet, Sepolia, Base, Robinhood |
 | `CoWSwapV1Protocol` | Intent | CoW Swap off-chain orders (ERC-1271 validation) | Mainnet, Sepolia, Base |
+| `UniswapXV1Protocol` | Intent | UniswapX V3 Dutch orders, vault as Permit2 swapper (ERC-1271 validation) | Robinhood |
 
 ### How adapters fit the vault
 
@@ -26,7 +27,7 @@ Vault (owner)
 ```
 
 - **Lending / staking / AMM** — on-chain execution; the vault is `msg.sender` and usually holds receipt tokens (aTokens, stETH shares, Uniswap V3 position NFTs).
-- **Intent (CoW Swap)** — no on-chain order registry. The asset manager signs orders off-chain; at settlement CoW calls the vault's `isValidSignature`, which delegates to the clone to validate shape, fees, and manager authorization.
+- **Intent (CoW Swap, UniswapX)** — no on-chain order registry. The asset manager signs orders off-chain; at settlement CoW (or, for UniswapX, Permit2 on the reactor's behalf) calls the vault's `isValidSignature`, which delegates to the clone to validate shape, fees, and manager authorization.
 
 ### Fees
 
@@ -34,6 +35,7 @@ Vault (owner)
 |---|---|---|
 | `UniswapUniversalProtocol` | 0.2% on market swaps; 1% of collected LP trading fees | `0x12EE2de7BF086388B1D560eb95e7191Edfab9823` |
 | `CoWSwapV1Protocol` | 0.2% partner fee (enforced in order `appData`) | same |
+| `UniswapXV1Protocol` | 0.2% of the buy token, as a second order output (checked at auction start and floor) | same |
 
 Principal returned from liquidity decreases is not subject to the Uniswap collect fee.
 
@@ -43,7 +45,7 @@ Principal returned from liquidity decreases is not subject to the Uniswap collec
 src/
   interfaces/          # IBittyV1* category interfaces (+ IBittyVaultOffchainAuth)
   protocols/           # Adapter implementations
-  libs/                # Minimal external-protocol bindings (Aave, Lido, Sky, Uniswap, CoW)
+  libs/                # Minimal external-protocol bindings (Aave, Lido, Sky, Uniswap, UniswapX, CoW)
 script/
   DeployMainnet.s.sol  # All five adapters
   DeploySepolia.s.sol  # Aave, Uniswap, CoW, Lido (no Sky on testnet)

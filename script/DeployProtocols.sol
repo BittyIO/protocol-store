@@ -8,6 +8,7 @@ import {LidoV2Protocol} from "../src/protocols/LidoV2Protocol.sol";
 import {SkyV1Protocol} from "../src/protocols/SkyV1Protocol.sol";
 import {SkyV1EvmProtocol} from "../src/protocols/SkyV1EvmProtocol.sol";
 import {CoWSwapV1Protocol} from "../src/protocols/cowswap/CoWSwapV1Protocol.sol";
+import {UniswapXV1Protocol} from "../src/protocols/uniswapx/UniswapXV1Protocol.sol";
 import {DeployScript} from "./BaseDeploy.sol";
 import {IBittyV1Protocol} from "../src/interfaces/IBittyV1Protocol.sol";
 
@@ -163,6 +164,17 @@ abstract contract DeployProtocols is DeployScript {
         if (kept != address(0)) return;
         address deployed = address(new CoWSwapV1Protocol(settlement, relayer));
         _record("CoWSwapV1Protocol", "COW_SWAP_V1_PROTOCOL", deployed);
+        if (register) _register(replaced, deployed, PROTOCOL_INTENT);
+    }
+
+    function _deployUniswapX() internal {
+        address reactor = getAddress("UNISWAPX_V3_DUTCH_REACTOR");
+        address permit2 = getAddress("PERMIT2");
+        bytes memory initCode = abi.encodePacked(type(UniswapXV1Protocol).creationCode, abi.encode(reactor, permit2));
+        (address kept, address replaced, bool register) = _reuse("UniswapXV1Protocol", "UNISWAPX_V1_PROTOCOL", initCode);
+        if (kept != address(0)) return;
+        address deployed = address(new UniswapXV1Protocol(reactor, permit2));
+        _record("UniswapXV1Protocol", "UNISWAPX_V1_PROTOCOL", deployed);
         if (register) _register(replaced, deployed, PROTOCOL_INTENT);
     }
 

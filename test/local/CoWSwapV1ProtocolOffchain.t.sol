@@ -8,6 +8,8 @@ import {GPv2Order} from "../../src/libs/cow/GPv2Order.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {ERC1967Proxy} from "openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {BittyV1ProtocolBase} from "../../src/BittyV1ProtocolBase.sol";
+import {IBittyV1IntentProtocol, InvalidOrderId} from "../../src/interfaces/IBittyV1IntentProtocol.sol";
+import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 
 contract MockSettlement {
     bytes32 public immutable domainSeparator = keccak256("bitty-test-cow-domain");
@@ -344,5 +346,74 @@ contract CoWSwapV1ProtocolOffchainTest is Test {
         uids[0] = abi.encodePacked(keccak256("order-X"), address(vault), uint32(111)); // swap after signing
         bytes memory sig = abi.encode(uids, abi.encodePacked(r, s, v));
         assertEq(cow.isValidSignature(digest, sig), bytes4(0xffffffff));
+    }
+
+    // ----- generic intent interface: spender + clone-side cancellation -----
+
+    function test_spender_isVaultRelayer() public view {
+        assertEq(cow.spender(), RELAYER);
+    }
+
+    function _cancel(bytes memory id) internal {
+        bytes[] memory ids = new bytes[](1);
+        ids[0] = id;
+        vm.prank(address(vault));
+        cow.cancelOrders(ids);
+    }
+
+    function test_cancelByOrderUid_rejectsOrder() public {
+        GPv2Order.Data memory order = _order();
+        (bytes32 hash, bytes memory sig) = _payload(order, managerPk);
+        bytes memory uid = abi.encodePacked(hash, address(vault), order.validTo);
+        assertEq(uid.length, 56);
+
+        vm.expectEmit(address(cow));
+        bytes[] memory ids = new bytes[](1);
+        ids[0] = uid;
+        emit IBittyV1IntentProtocol.OrdersCancelled(ids);
+        _cancel(uid);
+
+        assertTrue(cow.isOrderCancelled(uid));
+        assertEq(cow.isValidSignature(hash, sig), bytes4(0xffffffff));
+    }
+
+    function test_cancel_leavesOtherOrdersValid() public {
+        GPv2Order.Data memory other = _order();
+        other.sellAmount = 2e18;
+        (bytes32 otherHash,) = _payload(other, managerPk);
+        _cancel(abi.encodePacked(otherHash));
+
+        (bytes32 hash, bytes memory sig) = _payload(_order(), managerPk);
+        assertEq(cow.isValidSignature(hash, sig), bytes4(0x1626ba7e));
+    }
+
+    function test_cancelTwapSchedule_rejectsEveryPart() public {
+        CoWSwapV1Protocol.TwapOrder memory p = _twap();
+        vm.warp(p.startTime + 1);
+        (bytes32 hash0, bytes memory sig0) = _twapPayload(p, 0, managerPk);
+        assertEq(cow.isValidSignature(hash0, sig0), bytes4(0x1626ba7e));
+
+        _cancel(abi.encodePacked(cow.twapDigest(p)));
+
+        assertEq(cow.isValidSignature(hash0, sig0), bytes4(0xffffffff));
+        vm.warp(p.startTime + p.partDuration + 1);
+        (bytes32 hash1, bytes memory sig1) = _twapPayload(p, 1, managerPk);
+        assertEq(cow.isValidSignature(hash1, sig1), bytes4(0xffffffff));
+    }
+
+    function test_cancel_onlyVault() public {
+        bytes[] memory ids = new bytes[](1);
+        ids[0] = abi.encodePacked(bytes32(uint256(1)));
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, manager));
+        vm.prank(manager);
+        cow.cancelOrders(ids);
+    }
+
+    function test_cancel_malformedId_reverts() public {
+        bytes[] memory ids = new bytes[](1);
+        ids[0] = hex"1234";
+        vm.expectRevert(InvalidOrderId.selector);
+        vm.prank(address(vault));
+        cow.cancelOrders(ids);
     }
 }

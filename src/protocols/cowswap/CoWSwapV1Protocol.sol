@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.34;
 
-import {BittyV1ProtocolBase} from "../../BittyV1ProtocolBase.sol";
-import {IBittyV1IntentProtocol} from "../../interfaces/IBittyV1IntentProtocol.sol";
+import {BittyV1IntentProtocolBase} from "../../BittyV1IntentProtocolBase.sol";
+import {IBittyV1IntentProtocol, InvalidOrderId} from "../../interfaces/IBittyV1IntentProtocol.sol";
 import {IBittyVaultOffchainAuth} from "../../interfaces/IBittyVaultOffchainAuth.sol";
 import {IGPv2Settlement} from "../../libs/cow/IGPv2Settlement.sol";
 import {GPv2Order} from "../../libs/cow/GPv2Order.sol";
@@ -21,7 +21,9 @@ import {Strings} from "openzeppelin-contracts/contracts/utils/Strings.sol";
  *         this clone's isValidSignature → validateOffchainOrder: it re-hashes the carried order under the
  *         settlement domain to bind it to the digest, checks the fee-bearing appData / receiver / shape,
  *         identifies the signer ({_signerOf}), and defers the allow/auth decision to the vault
- *         (IBittyVaultOffchainAuth). Cancellation is off-chain (CoW API soft-cancel / order expiry).
+ *         (IBittyVaultOffchainAuth). Cancellation is off-chain (CoW API soft-cancel / order expiry) or
+ *         recorded in this clone by the vault ({cancelOrders}, keyed by the order digest — or, for a
+ *         TWAP, by its schedule digest, which cancels every part).
  *
  *         Because nothing is reserved on-chain, an over-signed order simply fails validation at settlement
  *         once its backing balance is gone — no reservation, no leak, no cleanup.
@@ -40,7 +42,7 @@ import {Strings} from "openzeppelin-contracts/contracts/utils/Strings.sol";
  *         staticcall; ML-DSA, Falcon and SPHINCS+ are orders of magnitude too expensive. Make the
  *         swap while ECDSA is still trusted — the updateProtocols() call is itself ECDSA-signed.
  */
-contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolBase {
+contract CoWSwapV1Protocol is IERC1271, BittyV1IntentProtocolBase {
     using Strings for uint256;
 
     bytes4 private constant MAGICVALUE = 0x1626ba7e;
@@ -102,7 +104,21 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
     }
 
     function protocolVersion() external pure override returns (uint256) {
-        return 1_000_002; // 1.0.2: contract-wallet (ERC-1271) signers, so a Safe-owned vault can trade
+        return 1_000_003; // 1.0.3: generic intent interface - spender() and clone-side cancelOrders()
+    }
+
+    function spender() external view override returns (address) {
+        return vaultRelayer;
+    }
+
+    /**
+     * @dev A CoW order UID is abi.encodePacked(orderDigest, owner, validTo) — 56 bytes — and is keyed by
+     *      its digest, the `hash` CoW passes to isValidSignature. A bare 32-byte id is a digest as is:
+     *      a TWAP schedule's {twapDigest}, which cancels all of its parts.
+     */
+    function _orderKey(bytes calldata orderId) internal pure override returns (bytes32) {
+        if (orderId.length != 56 && orderId.length != 32) revert InvalidOrderId();
+        return bytes32(orderId[:32]);
     }
 
     /**
@@ -196,6 +212,7 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
 
         if (appDataSalt != 0) return INVALID;
         if (GPv2Order.hash(order, settlement.domainSeparator()) != hash) return INVALID;
+        if (_isCancelled(hash)) return INVALID;
         if (order.receiver != owner()) return INVALID;
         if (order.appData != APP_DATA) return INVALID;
         if (order.feeAmount != 0) return INVALID;
@@ -241,6 +258,8 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
 
         if (GPv2Order.hash(order, settlement.domainSeparator()) != hash) return INVALID;
         if (partIndex >= p.numParts) return INVALID;
+        bytes32 schedule = twapDigest(p);
+        if (_isCancelled(hash) || _isCancelled(schedule)) return INVALID;
         if (address(order.sellToken) != p.sellToken) return INVALID;
         if (address(order.buyToken) != p.buyToken) return INVALID;
         if (order.receiver != owner()) return INVALID;
@@ -256,7 +275,7 @@ contract CoWSwapV1Protocol is IBittyV1IntentProtocol, IERC1271, BittyV1ProtocolB
         if (block.timestamp < p.startTime + partIndex * p.partDuration) return INVALID;
         if (order.validTo < block.timestamp) return INVALID;
 
-        (address signer, bool ok) = _signerOf(twapDigest(p), signerSig);
+        (address signer, bool ok) = _signerOf(schedule, signerSig);
         if (
             ok
                 && IBittyVaultOffchainAuth(owner())

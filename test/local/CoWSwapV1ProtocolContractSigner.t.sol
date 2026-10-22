@@ -262,8 +262,8 @@ contract CoWSwapV1ProtocolContractSignerTest is Test {
         assertEq(cow.isValidSignature(digest, abi.encode(uids, _safeSig(digest))), INVALID);
     }
 
-    function test_version_is_1_0_2() public view {
-        assertEq(cow.protocolVersion(), 1_000_002);
-        assertEq(cow.versionName(), "1.0.2");
+    function test_version_is_1_0_3() public view {
+        assertEq(cow.protocolVersion(), 1_000_003);
+        assertEq(cow.versionName(), "1.0.3");
     }
 }
