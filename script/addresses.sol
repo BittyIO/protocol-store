@@ -66,7 +66,7 @@ library sepolia {
     address public constant BITTY_GUARD = 0x000000000F5fcD35885BfE4c700042cE7cb39554;
 }
 
-/// @dev Robinhood Chain (chain 4663) addresses. Uniswap (AMM) and UniswapX (intent) are the supported venues so far.
+/// @dev Robinhood Chain (chain 4663) addresses. Uniswap (AMM) is the supported venue so far.
 library robinhood {
     address public constant WETH = 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73;
     address public constant USDC = 0x80e0e24718dbFcad49ECAA6F1e6C89A190586cA8;
@@ -81,8 +81,6 @@ library robinhood {
     address public constant UNISWAP_V4_POOL_MANAGER = 0x8366a39CC670B4001A1121B8F6A443A643e40951;
     address public constant UNISWAP_V4_STATE_VIEW = 0xF3334192D15450CdD385c8B70e03f9A6bD9E673b;
     address public constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
-    // UniswapX V3DutchOrderReactor (deployed 2026-06-12; decay reads ArbSys.arbBlockNumber()).
-    address public constant UNISWAPX_V3_DUTCH_REACTOR = 0x000000007A1C8e570011EeDF86A2A35593013cBA;
 
     address public constant BITTY_GUARD = 0x000000000F5fcD35885BfE4c700042cE7cb39554;
 }

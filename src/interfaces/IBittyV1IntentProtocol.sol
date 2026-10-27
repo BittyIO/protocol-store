@@ -7,7 +7,7 @@ error InvalidOrderId();
 
 /**
  * @title IBittyV1IntentProtocol
- * @notice Generic interface for vault-custodian intent protocols (CoW Swap, UniswapX, etc.). Intent
+ * @notice Generic interface for vault-custodian intent protocols (CoW Swap, etc.). Intent
  *         orders are gasless and off-chain: a host-authorised signer signs an order off-chain and posts it
  *         to the protocol's orderbook. The vault is the ERC-1271 signer and token custodian; it holds no
  *         on-chain order registry.
@@ -23,7 +23,7 @@ error InvalidOrderId();
  *      reshaped so the vault only ever calls its own clone:
  *
  *      - Approval: the vault approves its sell token to {spender}, whatever that is for the protocol
- *        (CoW's vault relayer, Permit2 for UniswapX).
+ *        (CoW's vault relayer, for one).
  *      - Cancellation: {cancelOrders} records the cancel in the clone, and {isValidSignature} refuses a
  *        cancelled order from then on. Every settlement of every intent protocol reaches the order
  *        through the vault's isValidSignature and therefore through this clone, so this is a hard cancel
@@ -53,7 +53,7 @@ interface IBittyV1IntentProtocol is IBittyV1Protocol {
      * @notice Cancel orders. Owner (the vault) only; the vault decides who may ask it to.
      * @dev Permanent: a cancelled order id is never valid again. Reverts with {InvalidOrderId} for an id
      *      the protocol could not have issued.
-     * @param orderIds The protocol's own order ids (CoW: the order UID; UniswapX: the order hash).
+     * @param orderIds The protocol's own order ids (CoW: the order UID).
      */
     function cancelOrders(bytes[] calldata orderIds) external;
 
