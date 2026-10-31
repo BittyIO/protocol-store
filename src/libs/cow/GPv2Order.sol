@@ -32,7 +32,14 @@ library GPv2Order {
     uint256 internal constant UID_LENGTH = 56;
 
     function hash(Data memory order, bytes32 domainSeparator) internal pure returns (bytes32 orderDigest) {
-        bytes32 structHash = keccak256(
+        orderDigest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash(order)));
+    }
+
+    /**
+     * The EIP-712 struct hash of `order` alone, for a message that nests an Order under another domain.
+     */
+    function structHash(Data memory order) internal pure returns (bytes32) {
+        return keccak256(
             abi.encode(
                 TYPE_HASH,
                 order.sellToken,
@@ -49,7 +56,6 @@ library GPv2Order {
                 order.buyTokenBalance
             )
         );
-        orderDigest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
     }
 
     /// @dev Layout: orderDigest (32 bytes) || owner (20 bytes) || validTo (4 bytes) = 56 bytes

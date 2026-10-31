@@ -10,6 +10,7 @@ import {ERC1967Proxy} from "openzeppelin-contracts/contracts/proxy/ERC1967/ERC19
 import {BittyV1ProtocolBase} from "../../src/BittyV1ProtocolBase.sol";
 import {IBittyV1IntentProtocol, InvalidOrderId} from "../../src/interfaces/IBittyV1IntentProtocol.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
+import {ECDSA} from "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 
 contract MockSettlement {
     bytes32 public immutable domainSeparator = keccak256("bitty-test-cow-domain");
@@ -85,6 +86,15 @@ contract CoWSwapV1ProtocolOffchainTest is Test {
         });
     }
 
+    function _cloneFor(address host) internal returns (CoWSwapV1Protocol) {
+        return CoWSwapV1Protocol(
+            payable(new ERC1967Proxy(
+                    address(new CoWSwapV1Protocol(address(settlement), RELAYER)),
+                    abi.encodeCall(BittyV1ProtocolBase.initialize, (host))
+                ))
+        );
+    }
+
     function _sign(uint256 pk, bytes32 hash) internal pure returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, hash);
         return abi.encodePacked(r, s, v);
@@ -92,7 +102,7 @@ contract CoWSwapV1ProtocolOffchainTest is Test {
 
     function _payload(GPv2Order.Data memory order, uint256 pk) internal view returns (bytes32 hash, bytes memory sig) {
         hash = GPv2Order.hash(order, settlement.domainSeparator());
-        sig = abi.encode(order, _sign(pk, hash), uint256(0));
+        sig = abi.encode(order, _sign(pk, cow.vaultOrderDigest(order)), uint256(0));
     }
 
     function test_validOffchainOrder_isSignable() public view {
@@ -105,12 +115,42 @@ contract CoWSwapV1ProtocolOffchainTest is Test {
         assertEq(cow.isValidSignature(hash, sig), bytes4(0xffffffff));
     }
 
-    function test_tamperedOrder_hashMismatch_rejected() public view {
+    /**
+     * M-01: the signature a vault order carries must not also be a CoW order from the signer's wallet.
+     * CoW's EIP-712 scheme recovers an order's owner from a plain signature over the GPv2 digest; the
+     * signer signs the Bitty VaultOrder instead, so that recovery names nobody who holds funds.
+     */
+    function test_vaultOrderSignatureIsNotAWalletOrder() public view {
         GPv2Order.Data memory order = _order();
         (bytes32 hash, bytes memory sig) = _payload(order, managerPk);
-        // Re-encode the payload with a mutated order but the original (signed) hash.
+        assertEq(cow.isValidSignature(hash, sig), bytes4(0x1626ba7e), "the vault order is valid");
+
+        (, bytes memory managerSig,) = abi.decode(sig, (GPv2Order.Data, bytes, uint256));
+        (address asWalletOrder,,) = ECDSA.tryRecover(hash, managerSig);
+        assertTrue(asWalletOrder != manager, "the same bytes would fill from the manager's wallet");
+    }
+
+    /// A signature over the bare CoW digest - what 1.0.3 asked for - no longer authorises a vault order.
+    function test_signatureOverTheCowDigestRejected() public view {
+        GPv2Order.Data memory order = _order();
+        bytes32 hash = GPv2Order.hash(order, settlement.domainSeparator());
+        assertEq(cow.isValidSignature(hash, abi.encode(order, _sign(managerPk, hash), uint256(0))), bytes4(0xffffffff));
+    }
+
+    /// The VaultOrder names the vault, so a signature for one vault's order says nothing for another's.
+    function test_vaultOrderDigestNamesTheVault() public {
+        MockVaultAuth vaultB = new MockVaultAuth(manager, BUY);
+        CoWSwapV1Protocol cowB = _cloneFor(address(vaultB));
+        assertTrue(cow.vaultOrderDigest(_order()) != cowB.vaultOrderDigest(_order()));
+    }
+
+    function test_tamperedOrder_hashMismatch_rejected() public view {
+        GPv2Order.Data memory order = _order();
+        (bytes32 hash,) = _payload(order, managerPk);
+        bytes memory managerSig = _sign(managerPk, cow.vaultOrderDigest(order));
+        // Re-encode the payload with a mutated order but the original signature and hash.
         order.buyAmount = 1; // steal: accept far less
-        bytes memory tampered = abi.encode(order, _sign(managerPk, hash), uint256(0));
+        bytes memory tampered = abi.encode(order, managerSig, uint256(0));
         assertEq(cow.isValidSignature(hash, tampered), bytes4(0xffffffff));
     }
 
@@ -256,12 +296,7 @@ contract CoWSwapV1ProtocolOffchainTest is Test {
      */
     function test_twap_scheduleSignedForOneVaultRejectedByAnother() public {
         MockVaultAuth vaultB = new MockVaultAuth(manager, BUY);
-        CoWSwapV1Protocol cowB = CoWSwapV1Protocol(
-            payable(new ERC1967Proxy(
-                    address(new CoWSwapV1Protocol(address(settlement), RELAYER)),
-                    abi.encodeCall(BittyV1ProtocolBase.initialize, (address(vaultB)))
-                ))
-        );
+        CoWSwapV1Protocol cowB = _cloneFor(address(vaultB));
 
         CoWSwapV1Protocol.TwapOrder memory p = _twap();
         vm.warp(p.startTime); // part 0's slot is open — rejection must come from the binding, not timing
@@ -326,7 +361,7 @@ contract CoWSwapV1ProtocolOffchainTest is Test {
     function test_validCancellation_isSignable() public view {
         bytes[] memory uids = _cancelUids();
         bytes32 digest = _cancellationDigest(uids);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(managerPk, digest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(managerPk, cow.vaultCancellationDigest(uids));
         bytes memory sig = abi.encode(uids, abi.encodePacked(r, s, v));
         assertEq(cow.isValidSignature(digest, sig), bytes4(0x1626ba7e));
     }
@@ -334,15 +369,32 @@ contract CoWSwapV1ProtocolOffchainTest is Test {
     function test_cancellation_wrongSigner_rejected() public view {
         bytes[] memory uids = _cancelUids();
         bytes32 digest = _cancellationDigest(uids);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(0xB0B, digest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(0xB0B, cow.vaultCancellationDigest(uids));
         bytes memory sig = abi.encode(uids, abi.encodePacked(r, s, v));
         assertEq(cow.isValidSignature(digest, sig), bytes4(0xffffffff));
+    }
+
+    /// Nor is a cancellation signature CoW's own: signed over the bare OrderCancellations digest, refused.
+    function test_cancellation_signedOverTheCowDigestRejected() public view {
+        bytes[] memory uids = _cancelUids();
+        bytes32 digest = _cancellationDigest(uids);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(managerPk, digest);
+        assertEq(cow.isValidSignature(digest, abi.encode(uids, abi.encodePacked(r, s, v))), bytes4(0xffffffff));
+    }
+
+    /// A cancellation signed for one vault does not cancel through another vault's clone.
+    function test_cancellation_signedForAnotherVaultRejected() public {
+        CoWSwapV1Protocol cowB = _cloneFor(address(new MockVaultAuth(manager, BUY)));
+        bytes[] memory uids = _cancelUids();
+        bytes32 digest = _cancellationDigest(uids);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(managerPk, cow.vaultCancellationDigest(uids));
+        assertEq(cowB.isValidSignature(digest, abi.encode(uids, abi.encodePacked(r, s, v))), bytes4(0xffffffff));
     }
 
     function test_cancellation_tamperedUids_rejected() public view {
         bytes[] memory uids = _cancelUids();
         bytes32 digest = _cancellationDigest(uids);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(managerPk, digest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(managerPk, cow.vaultCancellationDigest(uids));
         uids[0] = abi.encodePacked(keccak256("order-X"), address(vault), uint32(111)); // swap after signing
         bytes memory sig = abi.encode(uids, abi.encodePacked(r, s, v));
         assertEq(cow.isValidSignature(digest, sig), bytes4(0xffffffff));

@@ -26,7 +26,7 @@ Vault (owner)
 ```
 
 - **Lending / staking / AMM** — on-chain execution; the vault is `msg.sender` and usually holds receipt tokens (aTokens, stETH shares, Uniswap V3 position NFTs).
-- **Intent (CoW Swap)** — no on-chain order registry. The asset manager signs orders off-chain; at settlement CoW calls the vault's `isValidSignature`, which delegates to the clone to validate shape, fees, and manager authorization.
+- **Intent (CoW Swap)** — no on-chain order registry. The owner or asset manager signs each order off-chain as a Bitty `VaultOrder` (EIP-712 domain "Bitty Vault Order", version "1"; the vault plus the CoW order nested whole — see `vaultOrderDigest`), never the bare CoW order digest, which CoW would also accept as an order from the signer's own wallet. Cancellations are signed the same way (`vaultCancellationDigest`); at settlement CoW calls the vault's `isValidSignature`, which delegates to the clone to validate shape, fees, and manager authorization.
 
 ### Fees
 

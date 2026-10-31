@@ -16,11 +16,11 @@ import {Strings} from "openzeppelin-contracts/contracts/utils/Strings.sol";
  * @notice CoW Swap intent protocol — a thin ERC-1271 validator for the vault's gasless, off-chain-signed
  *         orders. There is NO on-chain order registry and NO on-chain placement or cancellation.
  *
- *         An authorised signer signs a CoW order off-chain (EIP-712) and posts it to the CoW API with
- *         signingScheme=eip1271. At settlement CoW calls the vault's isValidSignature, which delegates to
+ *         An authorised signer signs a {vaultOrderDigest} off-chain (EIP-712) and posts the order to the
+ *         CoW API with signingScheme=eip1271. At settlement CoW calls the vault's isValidSignature, which delegates to
  *         this clone's isValidSignature → validateOffchainOrder: it re-hashes the carried order under the
  *         settlement domain to bind it to the digest, checks the fee-bearing appData / receiver / shape,
- *         identifies the signer ({_signerOf}), and defers the allow/auth decision to the vault
+ *         identifies the signer of the Bitty VaultOrder that wraps it ({_signerOf}), and defers the allow/auth decision to the vault
  *         (IBittyVaultOffchainAuth). Cancellation is off-chain (CoW API soft-cancel / order expiry) or
  *         recorded in this clone by the vault ({cancelOrders}, keyed by the order digest — or, for a
  *         TWAP, by its schedule digest, which cancels every part).
@@ -67,6 +67,26 @@ contract CoWSwapV1Protocol is IERC1271, BittyV1IntentProtocolBase {
     // EIP-712 type hash for CoW's batch order cancellation, signed off-chain to soft-cancel orders.
     bytes32 private constant CANCELLATIONS_TYPE_HASH = keccak256("OrderCancellations(bytes[] orderUids)");
 
+    /**
+     * @dev What a signer signs is never the CoW digest itself. A plain signature over a GPv2 order digest
+     *      is what CoW's settlement accepts as an EIP-712 order owned by the SIGNER, so the bytes that
+     *      authorised a vault order would also fill from the signer's own wallet: same tokens and limit,
+     *      a different order UID, proceeds paid into the vault. Signing instead under Bitty's own domain,
+     *      with the vault named in the message, gives CoW nothing it can settle and binds each signature
+     *      to one vault. The CoW order is nested whole, so a wallet still shows every field it signs.
+     *      Cancellations are wrapped the same way. TWAP schedules already have their own type, which
+     *      names the vault.
+     */
+    bytes32 private constant BITTY_DOMAIN_TYPE_HASH =
+        keccak256("EIP712Domain(string name,string version,uint256 chainId)");
+    bytes32 private constant BITTY_DOMAIN_NAME_HASH = keccak256("Bitty Vault Order");
+    bytes32 private constant BITTY_DOMAIN_VERSION_HASH = keccak256("1");
+    bytes32 private constant VAULT_ORDER_TYPE_HASH = keccak256(
+        "VaultOrder(address vault,Order order)Order(address sellToken,address buyToken,address receiver,uint256 sellAmount,uint256 buyAmount,uint32 validTo,bytes32 appData,uint256 feeAmount,string kind,bool partiallyFillable,string sellTokenBalance,string buyTokenBalance)"
+    );
+    bytes32 private constant VAULT_CANCELLATIONS_TYPE_HASH =
+        keccak256("VaultOrderCancellations(address vault,bytes[] orderUids)");
+
     struct TwapOrder {
         address sellToken;
         address buyToken;
@@ -104,7 +124,7 @@ contract CoWSwapV1Protocol is IERC1271, BittyV1IntentProtocolBase {
     }
 
     function protocolVersion() external pure override returns (uint256) {
-        return 1_000_003; // 1.0.3: generic intent interface - spender() and clone-side cancelOrders()
+        return 1_000_004; // 1.0.4: signers sign a Bitty VaultOrder, never a bare CoW order digest
     }
 
     function spender() external view override returns (address) {
@@ -148,25 +168,64 @@ contract CoWSwapV1Protocol is IERC1271, BittyV1IntentProtocolBase {
     /**
      * @notice Validate a gasless, off-chain-signed CoW order cancellation. `signature` is
      *         abi.encode(bytes[] orderUids, bytes signerSignature). The EIP-712 OrderCancellations digest
-     *         (under the settlement domain) must equal `hash`, and the signer ({_signerOf}) must be the vault's
-     *         host. Cancelling moves no funds, so no token/balance checks apply.
+     *         (under the settlement domain) must equal `hash`, and the signer of the same uids'
+     *         {vaultCancellationDigest} ({_signerOf}) must be authorised by the vault. Cancelling moves no
+     *         funds, so no token/balance checks apply.
      */
     function validateOffchainCancellation(bytes32 hash, bytes calldata signature) external view returns (bytes4) {
         (bytes[] memory orderUids, bytes memory signerSig) = abi.decode(signature, (bytes[], bytes));
 
-        bytes32[] memory hashedUids = new bytes32[](orderUids.length);
-        for (uint256 i = 0; i < orderUids.length; i++) {
-            hashedUids[i] = keccak256(orderUids[i]);
-        }
-        bytes32 structHash = keccak256(abi.encode(CANCELLATIONS_TYPE_HASH, keccak256(abi.encodePacked(hashedUids))));
+        bytes32 uidsHash = _uidsHash(orderUids);
+        bytes32 structHash = keccak256(abi.encode(CANCELLATIONS_TYPE_HASH, uidsHash));
         bytes32 digest = keccak256(abi.encodePacked(hex"1901", settlement.domainSeparator(), structHash));
         if (digest != hash) return INVALID;
 
-        (address signer, bool ok) = _signerOf(hash, signerSig);
+        (address signer, bool ok) = _signerOf(_vaultCancellationDigest(uidsHash), signerSig);
         if (ok && IBittyVaultOffchainAuth(owner()).isOffchainCancellationAuthorized(signer)) {
             return MAGICVALUE;
         }
         return INVALID;
+    }
+
+    /**
+     * @notice The EIP-712 domain a signer's VaultOrder and VaultOrderCancellations are signed under:
+     *         name "Bitty Vault Order", version "1", this chain's id.
+     */
+    function bittyDomainSeparator() public view returns (bytes32) {
+        return
+            keccak256(
+                abi.encode(BITTY_DOMAIN_TYPE_HASH, BITTY_DOMAIN_NAME_HASH, BITTY_DOMAIN_VERSION_HASH, block.chainid)
+            );
+    }
+
+    /**
+     * @notice What a signer signs to authorise `order` for this clone's vault:
+     *         VaultOrder(address vault, Order order), the CoW order nested whole.
+     */
+    function vaultOrderDigest(GPv2Order.Data memory order) public view returns (bytes32) {
+        bytes32 structHash = keccak256(abi.encode(VAULT_ORDER_TYPE_HASH, owner(), GPv2Order.structHash(order)));
+        return keccak256(abi.encodePacked(hex"1901", bittyDomainSeparator(), structHash));
+    }
+
+    /**
+     * @notice What a signer signs to cancel `orderUids` of this clone's vault through the CoW API:
+     *         VaultOrderCancellations(address vault, bytes[] orderUids).
+     */
+    function vaultCancellationDigest(bytes[] memory orderUids) public view returns (bytes32) {
+        return _vaultCancellationDigest(_uidsHash(orderUids));
+    }
+
+    function _vaultCancellationDigest(bytes32 uidsHash) private view returns (bytes32) {
+        bytes32 structHash = keccak256(abi.encode(VAULT_CANCELLATIONS_TYPE_HASH, owner(), uidsHash));
+        return keccak256(abi.encodePacked(hex"1901", bittyDomainSeparator(), structHash));
+    }
+
+    function _uidsHash(bytes[] memory orderUids) private pure returns (bytes32) {
+        bytes32[] memory hashedUids = new bytes32[](orderUids.length);
+        for (uint256 i = 0; i < orderUids.length; i++) {
+            hashedUids[i] = keccak256(orderUids[i]);
+        }
+        return keccak256(abi.encodePacked(hashedUids));
     }
 
     function twapFullAppData(uint256 salt) public pure returns (string memory) {
@@ -203,8 +262,8 @@ contract CoWSwapV1Protocol is IERC1271, BittyV1IntentProtocolBase {
      *          field changes the hash and fails;
      *       2. it must settle to the vault (receiver == owner()), carry the fee-bearing APP_DATA, be
      *          fill-or-kill ERC-20/ERC-20 with feeAmount 0, and not be expired;
-     *       3. the signer ({_signerOf}) must be authorized by the vault for this exact trade (a pure view, so
-     *          no reservation is written and nothing can leak).
+     *       3. the signer of its {vaultOrderDigest} ({_signerOf}) must be authorized by the vault for this
+     *          exact trade (a pure view, so no reservation is written and nothing can leak).
      */
     function validateOffchainOrder(bytes32 hash, bytes calldata signature) external view returns (bytes4) {
         (GPv2Order.Data memory order, bytes memory signerSig, uint256 appDataSalt) =
@@ -221,7 +280,7 @@ contract CoWSwapV1Protocol is IERC1271, BittyV1IntentProtocolBase {
         if (order.buyTokenBalance != GPv2Order.BALANCE_ERC20) return INVALID;
         if (order.validTo < block.timestamp) return INVALID;
 
-        (address signer, bool ok) = _signerOf(hash, signerSig);
+        (address signer, bool ok) = _signerOf(vaultOrderDigest(order), signerSig);
         if (
             ok
                 && IBittyVaultOffchainAuth(owner())

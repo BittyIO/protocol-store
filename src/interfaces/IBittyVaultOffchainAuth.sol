@@ -14,15 +14,10 @@ pragma solidity ^0.8.34;
 interface IBittyVaultOffchainAuth {
     /**
      * @notice Authorize placing an order. MUST return true only when the host authorises `signer` to
-     *         trade, `buyToken` is allow-listed, and the vault's raw ERC-20 balance of `sellToken` is at
-     *         least `sellAmount` and stays at or above its minimal-balance floor afterward. No on-chain
-     *         reservation is written, so an over-signed order simply fails this check once its backing is
-     *         gone — nothing leaks.
-     * @dev Authorize placing an order. MUST return true only when the host authorises `signer` to
-     *         trade, `buyToken` is allow-listed, and the vault's raw ERC-20 balance of `sellToken` is at
-     *         least `sellAmount` and stays at or above its minimal-balance floor afterward. No on-chain
-     *         reservation is written, so an over-signed order simply fails this check once its backing is
-     *         gone — nothing leaks.
+     *         trade, `buyToken` is allow-listed (and, while the vault is locked, a stable coin), and the
+     *         vault's raw ERC-20 balance of `sellToken` is at least `sellAmount`.
+     * @dev No on-chain reservation is written, so an over-signed order simply fails this check once its
+     *      backing is gone — nothing leaks.
      * @param signer The address of the signer.
      * @param sellToken The address of the sell token.
      * @param buyToken The address of the buy token.
