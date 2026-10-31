@@ -113,11 +113,16 @@ contract CoWSwapV1ProtocolContractSignerTest is Test {
         return GPv2Order.hash(_order(), settlement.domainSeparator());
     }
 
+    /// What the vault's signer signs for `_order()`: the Bitty VaultOrder, not the CoW digest.
+    function _signed() internal view returns (bytes32) {
+        return cow.vaultOrderDigest(_order());
+    }
+
     // ---- limit orders ----
 
     function test_limit_safeSigner_isSignable() public view {
         bytes32 hash = _orderHash();
-        bytes memory sig = abi.encode(_order(), _wrapped(address(safe), _safeSig(hash)), uint256(0));
+        bytes memory sig = abi.encode(_order(), _wrapped(address(safe), _safeSig(_signed())), uint256(0));
         assertEq(cow.isValidSignature(hash, sig), MAGIC);
     }
 
@@ -125,13 +130,13 @@ contract CoWSwapV1ProtocolContractSignerTest is Test {
         // A 1-of-1 Safe signature is itself 65 bytes: presented bare it recovers the Safe's OWNER key,
         // who is not the vault's signer.
         bytes32 hash = _orderHash();
-        bytes memory sig = abi.encode(_order(), _safeSig(hash), uint256(0));
+        bytes memory sig = abi.encode(_order(), _safeSig(_signed()), uint256(0));
         assertEq(cow.isValidSignature(hash, sig), INVALID);
     }
 
     function test_limit_wrappedWrongKey_rejected() public view {
         bytes32 hash = _orderHash();
-        bytes memory bad = _sign(0xB0B, safe.messageHash(hash));
+        bytes memory bad = _sign(0xB0B, safe.messageHash(_signed()));
         bytes memory sig = abi.encode(_order(), _wrapped(address(safe), bad), uint256(0));
         assertEq(cow.isValidSignature(hash, sig), INVALID);
     }
@@ -145,16 +150,17 @@ contract CoWSwapV1ProtocolContractSignerTest is Test {
         GPv2Order.Data memory order = _order();
         order.receiver = address(eoaVault);
         bytes32 hash = GPv2Order.hash(order, settlement.domainSeparator());
+        bytes32 signed = eoaCow.vaultOrderDigest(order);
 
-        bytes memory sig = abi.encode(order, _wrapped(eoa, _sign(eoaPk, hash)), uint256(0));
+        bytes memory sig = abi.encode(order, _wrapped(eoa, _sign(eoaPk, signed)), uint256(0));
         assertEq(eoaCow.isValidSignature(hash, sig), INVALID);
         // ...while the bare form still works for it.
-        assertEq(eoaCow.isValidSignature(hash, abi.encode(order, _sign(eoaPk, hash), uint256(0))), MAGIC);
+        assertEq(eoaCow.isValidSignature(hash, abi.encode(order, _sign(eoaPk, signed), uint256(0))), MAGIC);
     }
 
     function test_limit_safeRotatesOwner_orderStopsValidating() public {
         bytes32 hash = _orderHash();
-        bytes memory sig = abi.encode(_order(), _wrapped(address(safe), _safeSig(hash)), uint256(0));
+        bytes memory sig = abi.encode(_order(), _wrapped(address(safe), _safeSig(_signed())), uint256(0));
         assertEq(cow.isValidSignature(hash, sig), MAGIC);
         safe.setOwner(address(0xdead));
         assertEq(cow.isValidSignature(hash, sig), INVALID);
@@ -173,7 +179,7 @@ contract CoWSwapV1ProtocolContractSignerTest is Test {
 
     function test_limit_signerWithNoCode_rejected() public view {
         bytes32 hash = _orderHash();
-        bytes memory sig = abi.encode(_order(), _wrapped(address(0xC0FFEE), _safeSig(hash)), uint256(0));
+        bytes memory sig = abi.encode(_order(), _wrapped(address(0xC0FFEE), _safeSig(_signed())), uint256(0));
         assertEq(cow.isValidSignature(hash, sig), INVALID);
     }
 
@@ -251,7 +257,7 @@ contract CoWSwapV1ProtocolContractSignerTest is Test {
         bytes[] memory uids = new bytes[](1);
         uids[0] = abi.encodePacked(keccak256("order-1"), address(vault), uint32(111));
         bytes32 digest = _cancellationDigest(uids);
-        bytes memory sig = abi.encode(uids, _wrapped(address(safe), _safeSig(digest)));
+        bytes memory sig = abi.encode(uids, _wrapped(address(safe), _safeSig(cow.vaultCancellationDigest(uids))));
         assertEq(cow.isValidSignature(digest, sig), MAGIC);
     }
 
@@ -259,11 +265,11 @@ contract CoWSwapV1ProtocolContractSignerTest is Test {
         bytes[] memory uids = new bytes[](1);
         uids[0] = abi.encodePacked(keccak256("order-1"), address(vault), uint32(111));
         bytes32 digest = _cancellationDigest(uids);
-        assertEq(cow.isValidSignature(digest, abi.encode(uids, _safeSig(digest))), INVALID);
+        assertEq(cow.isValidSignature(digest, abi.encode(uids, _safeSig(cow.vaultCancellationDigest(uids)))), INVALID);
     }
 
-    function test_version_is_1_0_3() public view {
-        assertEq(cow.protocolVersion(), 1_000_003);
-        assertEq(cow.versionName(), "1.0.3");
+    function test_version_is_1_0_4() public view {
+        assertEq(cow.protocolVersion(), 1_000_004);
+        assertEq(cow.versionName(), "1.0.4");
     }
 }

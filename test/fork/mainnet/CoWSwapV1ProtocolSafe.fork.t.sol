@@ -48,7 +48,7 @@ interface ICompatibilityFallbackHandler {
  *      handler, inside the staticcall CoW makes at settlement — accepts what its owners produce for the
  *      exact digests the clone asks about, under the Safe versions vaults are actually owned by.
  *
- *      Owners sign the Safe's SafeMessage hash of the CoW digest (what Safe{Wallet} signs for an
+ *      Owners sign the Safe's SafeMessage hash of the Bitty VaultOrder digest (what Safe{Wallet} signs for an
  *      off-chain message); the Safe's signature is their 65-byte signatures sorted by owner address
  *      and concatenated, and the clone receives it wrapped as abi.encode(safe, signature).
  */
@@ -158,7 +158,7 @@ abstract contract CoWSwapV1ProtocolSafeForkBase is Test {
     function _limitPayload(uint256[] memory pks) internal view returns (bytes32 hash, bytes memory payload) {
         GPv2Order.Data memory order = _order(address(vault));
         hash = GPv2Order.hash(order, _domain());
-        payload = abi.encode(order, _wrapped(safe, _safeSignature(safe, hash, pks)), uint256(0));
+        payload = abi.encode(order, _wrapped(safe, _safeSignature(safe, cow.vaultOrderDigest(order), pks)), uint256(0));
     }
 
     // ---- the Safe is what the test thinks it is ----
@@ -187,7 +187,7 @@ abstract contract CoWSwapV1ProtocolSafeForkBase is Test {
     function test_limit_unsortedSignatures_rejected() public view {
         GPv2Order.Data memory order = _order(address(vault));
         bytes32 hash = GPv2Order.hash(order, _domain());
-        bytes memory sorted = _safeSignature(safe, hash, _pks(ownerPks[0], ownerPks[1]));
+        bytes memory sorted = _safeSignature(safe, cow.vaultOrderDigest(order), _pks(ownerPks[0], ownerPks[1]));
         // Swap the two 65-byte signatures: a Safe requires ascending owners.
         bytes memory swapped = new bytes(130);
         for (uint256 i; i < 65; i++) {
@@ -206,7 +206,7 @@ abstract contract CoWSwapV1ProtocolSafeForkBase is Test {
     function test_limit_unwrappedSafeSignature_rejected() public view {
         GPv2Order.Data memory order = _order(address(vault));
         bytes32 hash = GPv2Order.hash(order, _domain());
-        bytes memory bare = _safeSignature(safe, hash, _pks(ownerPks[0], ownerPks[1]));
+        bytes memory bare = _safeSignature(safe, cow.vaultOrderDigest(order), _pks(ownerPks[0], ownerPks[1]));
         assertEq(cow.isValidSignature(hash, abi.encode(order, bare, uint256(0))), INVALID);
     }
 
@@ -241,7 +241,7 @@ abstract contract CoWSwapV1ProtocolSafeForkBase is Test {
         (MockVaultAuth soloVault, CoWSwapV1Protocol soloCow) = _vaultOwnedBy(address(solo));
         GPv2Order.Data memory order = _order(address(soloVault));
         bytes32 hash = GPv2Order.hash(order, _domain());
-        bytes memory sig = _safeSignature(solo, hash, _pk(ownerPks[0]));
+        bytes memory sig = _safeSignature(solo, soloCow.vaultOrderDigest(order), _pk(ownerPks[0]));
         assertEq(sig.length, 65);
 
         assertEq(soloCow.isValidSignature(hash, abi.encode(order, _wrapped(solo, sig), uint256(0))), MAGIC);
@@ -253,7 +253,7 @@ abstract contract CoWSwapV1ProtocolSafeForkBase is Test {
         ISafe twin = _deploySafe(_owners(3), 2);
         GPv2Order.Data memory order = _order(address(vault));
         bytes32 hash = GPv2Order.hash(order, _domain());
-        bytes memory twinSig = _safeSignature(twin, hash, _pks(ownerPks[0], ownerPks[1]));
+        bytes memory twinSig = _safeSignature(twin, cow.vaultOrderDigest(order), _pks(ownerPks[0], ownerPks[1]));
         assertEq(cow.isValidSignature(hash, abi.encode(order, _wrapped(safe, twinSig), uint256(0))), INVALID);
     }
 
@@ -327,8 +327,10 @@ abstract contract CoWSwapV1ProtocolSafeForkBase is Test {
             keccak256(abi.encode(keccak256("OrderCancellations(bytes[] orderUids)"), keccak256(abi.encodePacked(h))));
         bytes32 digest = keccak256(abi.encodePacked(hex"1901", _domain(), structHash));
 
-        bytes memory sig =
-            abi.encode(uids, _wrapped(safe, _safeSignature(safe, digest, _pks(ownerPks[0], ownerPks[2]))));
+        bytes memory sig = abi.encode(
+            uids,
+            _wrapped(safe, _safeSignature(safe, cow.vaultCancellationDigest(uids), _pks(ownerPks[0], ownerPks[2])))
+        );
         assertEq(cow.isValidSignature(digest, sig), MAGIC);
     }
 }
