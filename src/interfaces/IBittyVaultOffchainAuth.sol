@@ -30,9 +30,9 @@ interface IBittyVaultOffchainAuth {
         returns (bool);
 
     /**
-     * @notice Authorize cancelling order(s). No token or balance checks: cancelling never moves funds,
-     *         so a host that permits `signer` to trade at all should permit them to cancel — including
-     *         while trading is otherwise paused, or a paused vault could not withdraw its own orders.
+     * @notice Authorize cancelling order(s). No token or balance checks: cancelling never moves funds.
+     *         Whether a host still permits cancelling while its trading is restricted — under a lock,
+     *         say — is the host's to decide; a host that refuses leaves those orders to their expiry.
      * @dev WHICH signers a host authorises is the host's business and deliberately not described here.
      *      This adapter asks a question and takes an answer; it does not know whether the host models
      *      authority as one role, several, or a sub-account, and must not have to change when that
