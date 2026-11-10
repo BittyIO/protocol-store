@@ -4,6 +4,7 @@ pragma solidity ^0.8.34;
 import {console2} from "forge-std/console2.sol";
 import {AaveV3Protocol} from "../src/protocols/AaveV3Protocol.sol";
 import {UniswapUniversalTradeProtocol} from "../src/protocols/UniswapUniversalTradeProtocol.sol";
+import {PancakeSwapUniversalTradeProtocol} from "../src/protocols/PancakeSwapUniversalTradeProtocol.sol";
 import {LidoV2Protocol} from "../src/protocols/LidoV2Protocol.sol";
 import {SkyV1Protocol} from "../src/protocols/SkyV1Protocol.sol";
 import {SkyV1EvmProtocol} from "../src/protocols/SkyV1EvmProtocol.sol";
@@ -152,6 +153,25 @@ abstract contract DeployProtocols is DeployScript {
         if (kept != address(0)) return;
         address deployed = address(new UniswapUniversalTradeProtocol(universal, permit2, guard));
         _record("UniswapUniversalTradeProtocol", "UNISWAP_TRADE_PROTOCOL", deployed);
+        if (register) _register(replaced, deployed, PROTOCOL_MARKET_TRADE);
+    }
+
+    /**
+     * @dev PancakeSwap's Infinity Universal Router with PancakeSwap's own Permit2 — not the canonical
+     *      Uniswap one, which this router does not pull through.
+     */
+    function _deployPancakeSwapUniversal() internal {
+        address guard = getAddress("BITTY_GUARD");
+        address universal = getAddress("PANCAKE_UNIVERSAL_ROUTER");
+        address permit2 = getAddress("PANCAKE_PERMIT2");
+        bytes memory initCode = abi.encodePacked(
+            type(PancakeSwapUniversalTradeProtocol).creationCode, abi.encode(universal, permit2, guard)
+        );
+        (address kept, address replaced, bool register) =
+            _reuse("PancakeSwapUniversalTradeProtocol", "PANCAKESWAP_TRADE_PROTOCOL", initCode);
+        if (kept != address(0)) return;
+        address deployed = address(new PancakeSwapUniversalTradeProtocol(universal, permit2, guard));
+        _record("PancakeSwapUniversalTradeProtocol", "PANCAKESWAP_TRADE_PROTOCOL", deployed);
         if (register) _register(replaced, deployed, PROTOCOL_MARKET_TRADE);
     }
 
