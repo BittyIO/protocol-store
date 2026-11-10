@@ -8,12 +8,13 @@ Adapters are **curated** — only addresses registered in the Bitty Guard may be
 
 | Adapter | Category | Underlying | Chains |
 |---|---|---|---|
-| `AaveV3Protocol` | Lending | Aave V3 deposit / withdraw | Mainnet, Sepolia, Base |
+| `AaveV3Protocol` | Lending | Aave V3 deposit / withdraw | Mainnet, Sepolia, Base, BSC |
 | `LidoV2Protocol` | Staking | WETH → stETH, async withdrawal queue | Mainnet, Sepolia |
 | `SkyV1Protocol` | Staking | USDC → sUSDS via Sky PSM + ERC-4626 vault | Mainnet |
 | `SkyV1EvmProtocol` | Staking | USDC → sUSDS via PSM3 (single-hop) | Base |
 | `UniswapUniversalProtocol` | AMM | Market swaps through the Universal Router (v3 + v4 routes) or a plain v3 path; Uniswap V3 LP (mint, decrease, remove, fee claim) | Mainnet, Sepolia, Base, Robinhood |
-| `CoWSwapV1Protocol` | Intent | CoW Swap off-chain orders (ERC-1271 validation) | Mainnet, Sepolia, Base |
+| `PancakeSwapUniversalTradeProtocol` | AMM | Market swaps through PancakeSwap's Infinity Universal Router (v2, v3, StableSwap, Infinity routes); the Uniswap trade adapter under its own lineage | BSC |
+| `CoWSwapV1Protocol` | Intent | CoW Swap off-chain orders (ERC-1271 validation) | Mainnet, Sepolia, Base, BSC |
 
 ### How adapters fit the vault
 
@@ -33,6 +34,7 @@ Vault (owner)
 | Adapter | Fee | Recipient |
 |---|---|---|
 | `UniswapUniversalProtocol` | 0.2% on market swaps; 1% of collected LP trading fees | `0x12EE2de7BF086388B1D560eb95e7191Edfab9823` |
+| `PancakeSwapUniversalTradeProtocol` | 0.2% on market swaps (same code as Uniswap's) | same |
 | `CoWSwapV1Protocol` | 0.2% partner fee (enforced in order `appData`) | same |
 
 Principal returned from liquidity decreases is not subject to the Uniswap collect fee.
@@ -48,12 +50,14 @@ script/
   DeployMainnet.s.sol  # All five adapters
   DeploySepolia.s.sol  # Aave, Uniswap, CoW, Lido (no Sky on testnet)
   DeployBase.s.sol     # Aave, Uniswap, CoW, SkyV1Base (no Lido on Base)
+  DeployBsc.s.sol      # Aave, PancakeSwap, CoW (no Lido or Sky on BNB Chain)
   DeployProtocols.sol  # Shared deploy steps (re-runnable, skips existing code)
   addresses.sol        # Hardcoded addresses for fork tests
 deployments/
   mainnet.toml         # RPC + external + deployed adapter addresses
   sepolia.toml
   base.toml
+  bsc.toml
 test/
   fork/                # Integration tests against live chain state
   local/               # Unit tests (CoW off-chain auth, etc.)
@@ -94,6 +98,9 @@ forge test --match-path "test/fork/sepolia/*"
 
 # Base fork tests
 forge test --match-path "test/fork/base/*"
+
+# BSC fork tests
+forge test --match-path "test/fork/bsc/*"
 ```
 
 Fork RPC URLs are configured in `foundry.toml` under `[rpc_endpoints]`. Test constants live in `script/addresses.sol` (`mainnet`, `sepolia`, and `base` libraries).
@@ -114,6 +121,10 @@ forge script script/DeploySepolia.s.sol:DeploySepolia \
 # Base — Aave, Uniswap, CoW, SkyV1Base
 forge script script/DeployBase.s.sol:DeployBase \
   --rpc-url base --broadcast --verify
+
+# BSC — Aave, PancakeSwap, CoW (no Lido or Sky on BNB Chain)
+forge script script/DeployBsc.s.sol:DeployBsc \
+  --rpc-url bsc --broadcast --verify
 ```
 
 Chain-specific external protocol addresses and deployed adapter addresses are stored in `deployments/<chain>.toml`. Scripts load this file via `forge-std` Config (`script/BaseDeploy.sol`) and write new adapter addresses back after broadcast.

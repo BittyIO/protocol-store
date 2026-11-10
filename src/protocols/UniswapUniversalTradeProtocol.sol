@@ -48,7 +48,11 @@ contract UniswapUniversalTradeProtocol is IBittyV1MarketTradeProtocol, BittyV1Pr
         bittyGuard = bittyGuard_;
     }
 
-    function protocolLineage() external pure override returns (bytes32) {
+    /**
+     * @dev Virtual so a fork of the Universal Router (PancakeSwap's) can run this adapter under its own
+     *      lineage: a vault keeps one clone per lineage, so two venues must not share one.
+     */
+    function protocolLineage() external pure virtual override returns (bytes32) {
         return keccak256("bitty.adapter.uniswap.universal");
     }
 

@@ -138,3 +138,31 @@ library arbitrum {
 
     address public constant BITTY_GUARD = 0x000000000F5fcD35885BfE4c700042cE7cb39554;
 }
+
+library bsc {
+    // BNB Smart Chain's wrapped native token and its two main stable coins. Both stable coins are
+    // Binance-Peg tokens with 18 decimals, unlike their 6-decimal Ethereum counterparts.
+    address public constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+    address public constant USDT = 0x55d398326f99059fF775485246999027B3197955;
+    address public constant USDC = 0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d;
+    address public constant BTCB = 0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c;
+
+    // Aave V3 BNB Market. AAVE_V3 is the PoolAddressesProvider; POOL_DATA_PROVIDER derived on chain
+    // from AAVE_V3.getPoolDataProvider().
+    address public constant AAVE_V3 = 0xff75B6da14FfbbfD355Daf7a2731456b3562Ba6D;
+    address public constant POOL_DATA_PROVIDER = 0xc90Df74A7c16245c5F5C5870327Ceb38Fe5d5328;
+
+    // PancakeSwap. The Infinity Universal Router per pancakeswap/infinity-universal-router
+    // deploy-addresses/bsc-mainnet.json, and the Permit2 its BSC deploy parameters name (PancakeSwap's
+    // own, not Uniswap's canonical one). v3 pools are created by the deployer, not the factory.
+    address public constant PANCAKE_UNIVERSAL_ROUTER = 0xd9C500DfF816a1Da21A48A732d3498Bf09dc9AEB;
+    address public constant PANCAKE_PERMIT2 = 0x31c2F6fcFf4F8759b3Bd5Bf0e1084A055615c768;
+    address public constant PANCAKE_V2_FACTORY = 0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73;
+    address public constant PANCAKE_V3_FACTORY = 0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865;
+
+    // CoW Swap. Deployed deterministically, so identical to mainnet.
+    address public constant COW_SETTLEMENT = 0x9008D19f58AAbD9eD0D60971565AA8510560ab41;
+    address public constant COW_VAULT_RELAYER = 0xC92E8bdf79f0507f65a392b0ab4667716BFE0110;
+
+    address public constant BITTY_GUARD = 0x000000000F5fcD35885BfE4c700042cE7cb39554;
+}
