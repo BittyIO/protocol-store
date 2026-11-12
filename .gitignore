@@ -23,3 +23,7 @@ lcov.info
 
 # ABI files
 abi/
+
+# TRON build output and the TRON runner
+out-tron/
+tron/node_modules/
