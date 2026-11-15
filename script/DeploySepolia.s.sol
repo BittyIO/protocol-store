@@ -9,5 +9,6 @@ contract DeploySepolia is DeployProtocols {
         _deployUniswapUniversal();
         _deployCoWSwap();
         _deployLido();
+        _deployAcrossBridge();
     }
 }
