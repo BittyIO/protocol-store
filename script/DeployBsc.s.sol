@@ -22,5 +22,6 @@ contract DeployBsc is DeployProtocols {
         _deployAave();
         _deployPancakeSwapUniversal();
         _deployCoWSwap();
+        _deployAcrossBridge();
     }
 }
