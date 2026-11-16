@@ -9,6 +9,7 @@ import {LidoV2Protocol} from "../src/protocols/LidoV2Protocol.sol";
 import {SkyV1Protocol} from "../src/protocols/SkyV1Protocol.sol";
 import {SkyV1EvmProtocol} from "../src/protocols/SkyV1EvmProtocol.sol";
 import {CoWSwapV1Protocol} from "../src/protocols/cowswap/CoWSwapV1Protocol.sol";
+import {AcrossBridgeProtocol} from "../src/protocols/AcrossBridgeProtocol.sol";
 import {DeployScript} from "./BaseDeploy.sol";
 import {IBittyV1Protocol} from "../src/interfaces/IBittyV1Protocol.sol";
 
@@ -50,6 +51,7 @@ abstract contract DeployProtocols is DeployScript {
     uint8 internal constant PROTOCOL_LENDING = 2;
     uint8 internal constant PROTOCOL_MARKET_TRADE = 3;
     uint8 internal constant PROTOCOL_INTENT = 4;
+    uint8 internal constant PROTOCOL_BRIDGE = 5;
 
     /**
      * @dev The protocolVersion() a fresh deploy of `initCode` declares — read from a throwaway
@@ -228,5 +230,28 @@ abstract contract DeployProtocols is DeployScript {
         address deployed = address(new SkyV1EvmProtocol(usdc, susds, psm3));
         _record("SkyV1EvmProtocol", "SKY_V1_PROTOCOL", deployed);
         if (register) _register(replaced, deployed, PROTOCOL_STAKING);
+    }
+
+    /**
+     * @dev ACROSS_SPOKE_POOL is Across's SpokePool on this chain (Sepolia 0x5ef6…B662, Ethereum
+     *      0x5c7B…35C5, Base 0x09ae…EC64, Arbitrum 0xe35e…5f2A, BSC 0x4e8E…d505).
+     *      TRON_VAULT_FACTORY / TRON_VAULT_INITCODE_HASH are optional: without them TRON is not a
+     *      destination from this chain. Routes are guard config (see {AcrossBridgeProtocol-routeKey}),
+     *      set separately by the guard's config manager.
+     */
+    function _deployAcrossBridge() internal {
+        address spokePool = getAddress("ACROSS_SPOKE_POOL");
+        address guard = getAddress("BITTY_GUARD");
+        address tronFactory = getAddressOr("TRON_VAULT_FACTORY", address(0));
+        bytes32 tronInitCodeHash =
+            tronFactory == address(0) ? bytes32(0) : config.get("TRON_VAULT_INITCODE_HASH").toBytes32();
+        bytes memory args = abi.encode(spokePool, guard, tronFactory, tronInitCodeHash);
+        bytes memory initCode = abi.encodePacked(type(AcrossBridgeProtocol).creationCode, args);
+        (address kept, address replaced, bool register) =
+            _reuse("AcrossBridgeProtocol", "ACROSS_BRIDGE_PROTOCOL", initCode);
+        if (kept != address(0)) return;
+        address deployed = address(new AcrossBridgeProtocol(spokePool, guard, tronFactory, tronInitCodeHash));
+        _record("AcrossBridgeProtocol", "ACROSS_BRIDGE_PROTOCOL", deployed);
+        if (register) _register(replaced, deployed, PROTOCOL_BRIDGE);
     }
 }

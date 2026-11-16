@@ -9,5 +9,6 @@ contract DeployArbitrum is DeployProtocols {
         _deployUniswapUniversal();
         _deployCoWSwap();
         _deploySkyEvm();
+        _deployAcrossBridge();
     }
 }

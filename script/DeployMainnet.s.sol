@@ -10,5 +10,6 @@ contract DeployMainnet is DeployProtocols {
         _deployCoWSwap();
         _deployLido();
         _deploySky();
+        _deployAcrossBridge();
     }
 }

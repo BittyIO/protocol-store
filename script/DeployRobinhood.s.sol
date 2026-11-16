@@ -19,5 +19,6 @@ import {DeployProtocols} from "./DeployProtocols.sol";
 contract DeployRobinhood is DeployProtocols {
     function deploy() public override {
         _deployUniswapUniversal();
+        _deployAcrossBridge();
     }
 }
