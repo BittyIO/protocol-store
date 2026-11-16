@@ -26,8 +26,8 @@ arbitrum = "https://arb1.arbitrum.io/rpc"
 # Robinhood Chain (Arbitrum Orbit L2, id 4663). The public endpoint is rate-limited; override with a
 # dedicated provider for anything heavier than a deploy.
 robinhood = "https://rpc.mainnet.chain.robinhood.com"
-# BNB Smart Chain (56). Public endpoint: the configured Alchemy key does not have BNB enabled.
-bsc = "https://bsc-dataseed.bnbchain.org"
+# BNB Smart Chain (56).
+bsc = "https://bnb-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}"
 
 [etherscan]
 # Robinhood Chain has no entry here on purpose: forge refuses an [etherscan] entry for a chain id it
