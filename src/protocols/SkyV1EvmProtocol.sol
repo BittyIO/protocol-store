@@ -2,6 +2,7 @@
 pragma solidity ^0.8.34;
 
 import {BittyV1ProtocolBase} from "../BittyV1ProtocolBase.sol";
+import {BittyV1YieldFee} from "../BittyV1YieldFee.sol";
 import {IBittyV1Protocol, InvalidAsset} from "../interfaces/IBittyV1Protocol.sol";
 import {IBittyV1Yield, ClaimNotSupported} from "../interfaces/IBittyV1Yield.sol";
 import {IPsm3} from "../libs/sky/Psm3.sol";
@@ -27,7 +28,8 @@ error PsmAssetMismatch();
  *      As with {SkyV1Protocol}, the receipt token (sUSDS) is held by the VAULT, not by this adapter:
  *      the adapter is a stateless router and holds nothing between calls.
  */
-contract SkyV1EvmProtocol is IBittyV1Yield, BittyV1ProtocolBase {
+/// @dev From 1.1.0 it takes Bitty's yield fee (see {BittyV1YieldFee}) in USDC.
+contract SkyV1EvmProtocol is IBittyV1Yield, BittyV1ProtocolBase, BittyV1YieldFee {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable usdc;
@@ -48,13 +50,14 @@ contract SkyV1EvmProtocol is IBittyV1Yield, BittyV1ProtocolBase {
     }
 
     function protocolVersion() external pure override returns (uint256) {
-        return 1_000_000; // 1.0.0
+        return 1_001_000; // 1.1.0: the yield fee
     }
 
     function deposit(address asset, uint256 amount) external override onlyOwner {
         if (asset != address(usdc)) revert InvalidAsset();
 
         usdc.safeTransferFrom(msg.sender, address(this), amount);
+        (uint256 gross,) = _openBooks(asset);
 
         if (usdc.allowance(address(this), address(psm)) < amount) {
             usdc.forceApprove(address(psm), type(uint256).max);
@@ -66,15 +69,37 @@ contract SkyV1EvmProtocol is IBittyV1Yield, BittyV1ProtocolBase {
         if (receiptTokenOf[asset] == address(0)) {
             receiptTokenOf[asset] = address(sUsds);
         }
+        _closeDeposit(asset, gross);
     }
 
-    function getBalance(address asset) external view override returns (uint256) {
-        if (asset != address(usdc)) revert InvalidAsset();
+    /**
+     * @dev 100 USDC.
+     */
+    function _minFee(address) internal pure override returns (uint256) {
+        return 100e6;
+    }
+
+    /**
+     * The vault's sUSDS in USDC, as the PSM would pay it out.
+     */
+    function _gross(address) internal view override returns (uint256) {
         uint256 shares = sUsds.balanceOf(owner());
         if (shares == 0) return 0;
         return psm.previewSwapExactIn(address(sUsds), address(usdc), shares);
     }
 
+    /**
+     * What the vault can take out, in USDC: its sUSDS less the yield fee it owes.
+     */
+    function getBalance(address asset) external view override returns (uint256) {
+        if (asset != address(usdc)) revert InvalidAsset();
+        return _net(asset);
+    }
+
+    /**
+     * @dev With a fee owed, the PSM pays the clone `amount` plus the fee and the clone splits it; with
+     *      none, it pays `recipient` directly, as before the fee.
+     */
     function withdraw(address asset, uint256 amount, address recipient)
         external
         override
@@ -82,6 +107,10 @@ contract SkyV1EvmProtocol is IBittyV1Yield, BittyV1ProtocolBase {
         returns (uint256 delivered)
     {
         if (asset != address(usdc)) revert InvalidAsset();
+        (uint256 gross, uint256 owed) = _openBooks(asset);
+        uint256 due = _feeDue(asset, amount, owed);
+        address payee = due == 0 ? recipient : address(this);
+        uint256 out;
 
         if (amount == type(uint256).max) {
             uint256 shares = sUsds.balanceOf(msg.sender);
@@ -90,16 +119,25 @@ contract SkyV1EvmProtocol is IBittyV1Yield, BittyV1ProtocolBase {
             _approvePsm(shares);
 
             uint256 minOut = psm.previewSwapExactIn(address(sUsds), address(usdc), shares);
-            return psm.swapExactIn(address(sUsds), address(usdc), shares, minOut, recipient, 0);
+            out = psm.swapExactIn(address(sUsds), address(usdc), shares, minOut, payee, 0);
+        } else {
+            out = amount + due;
+            uint256 sharesNeeded = psm.previewSwapExactOut(address(sUsds), address(usdc), out);
+            IERC20(address(sUsds)).safeTransferFrom(msg.sender, address(this), sharesNeeded);
+            _approvePsm(sharesNeeded);
+
+            // maxAmountIn is the preview from this same call, so it can only be met exactly.
+            psm.swapExactOut(address(sUsds), address(usdc), out, sharesNeeded, payee, 0);
         }
 
-        uint256 sharesNeeded = psm.previewSwapExactOut(address(sUsds), address(usdc), amount);
-        IERC20(address(sUsds)).safeTransferFrom(msg.sender, address(this), sharesNeeded);
-        _approvePsm(sharesNeeded);
-
-        // maxAmountIn is the preview from this same call, so it can only be met exactly.
-        psm.swapExactOut(address(sUsds), address(usdc), amount, sharesNeeded, recipient, 0);
-        return amount;
+        delivered = out;
+        if (due != 0) {
+            uint256 fee = due < out ? due : out;
+            _payYieldFee(address(usdc), fee);
+            delivered = out - fee;
+            usdc.safeTransfer(recipient, delivered);
+        }
+        _closeWithdrawal(asset, gross, due != owed);
     }
 
     function _approvePsm(uint256 shares) private {

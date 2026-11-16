@@ -138,7 +138,7 @@ contract ProtocolUpgradeTest is Test {
 
     /// The readable name is derived from the number, so the two can never disagree.
     function test_versionNameMatchesTheEncodedNumber() public {
-        assertEq(new AaveV3Protocol(address(1), address(2)).versionName(), "1.0.0");
+        assertEq(new AaveV3Protocol(address(1), address(2)).versionName(), "1.1.0");
         assertEq(AdapterV1(address(adapter)).versionName(), "1.0.0");
         AdapterV2 v = new AdapterV2();
         assertEq(v.protocolVersion(), 1_001_002);
