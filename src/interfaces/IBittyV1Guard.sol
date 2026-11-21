@@ -15,4 +15,6 @@ interface IBittyV1Guard {
      * @notice The category bitmask an asset was registered under (0 if never registered).
      */
     function assetCategory(address assetAddress) external view returns (uint8);
+
+    function getUint(bytes32 key) external view returns (uint256);
 }

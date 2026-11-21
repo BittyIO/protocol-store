@@ -3,7 +3,7 @@
 //
 //   node sunswap.mjs probe   --network mainnet [--trx 10] [--from T…]   simulate a TRX->USDT->TRX round trip
 //                                                                        through SunSwap; no key, no cost
-//   node sunswap.mjs deploy  --network nile [--fee-recipient T…] [--register] [--dry-run]
+//   node sunswap.mjs deploy  --network nile [--guard T…] [--fee-recipient T…] [--register] [--dry-run]
 //   node sunswap.mjs status  --network nile
 //   node sunswap.mjs route   --network nile --route 0x… [--token-out 0x…] [--trx 10]
 //                                       simulate a route from the web API's /trade/route (built for
@@ -72,6 +72,7 @@ const { positionals, values } = parseArgs({
     route: { type: "string" },
     "token-out": { type: "string" },
     register: { type: "boolean", default: false },
+    guard: { type: "string" }, // the guard's address, until it is recorded below
     "dry-run": { type: "boolean", default: false },
     "no-build": { type: "boolean", default: false },
     from: { type: "string" },
@@ -92,6 +93,7 @@ const chain = new Chain({
 });
 
 function configured(key) {
+  if (key === "guard" && values.guard) return toEvm(values.guard);
   if (network[key] === "TODO") throw new Error(`${values.network}: ${key} is still TODO`);
   return toEvm(network[key]);
 }

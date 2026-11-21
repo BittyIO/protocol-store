@@ -52,7 +52,9 @@ contract PancakeSwapUniversalTradeProtocolBscForkTest is Test {
         );
     }
 
-    /** USDT (18 decimals) per 1e18 WBNB. */
+    /**
+     * USDT (18 decimals) per 1e18 WBNB.
+     */
     function _bnbPrice() internal view returns (uint256) {
         (, int256 answer,,,) = IChainlinkFeed(BNB_USD).latestRoundData();
         return uint256(answer) * 1e10;
@@ -73,7 +75,9 @@ contract PancakeSwapUniversalTradeProtocolBscForkTest is Test {
         return UniversalRoute.encode(abi.encodePacked(CMD_V3_SWAP_EXACT_IN), inputs, block.timestamp + 60);
     }
 
-    /** A vault keeps one clone per lineage: PancakeSwap must not share Uniswap's. */
+    /**
+     * A vault keeps one clone per lineage: PancakeSwap must not share Uniswap's.
+     */
     function test_Bsc_OwnLineage() public {
         UniswapUniversalTradeProtocol uni =
             new UniswapUniversalTradeProtocol(bsc.PANCAKE_UNIVERSAL_ROUTER, bsc.PANCAKE_PERMIT2, bsc.BITTY_GUARD);

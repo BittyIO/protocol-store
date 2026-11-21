@@ -219,15 +219,20 @@ contract TestSkyV1ProtocolFork is Test {
         assertGe(balanceAfterYield, STAKE_AMOUNT);
     }
 
-    function test_Unstake_DeliversFullAmountNoYieldFee() public {
+    /**
+     * A full exit pays 5% of the gain to the fee collector and the rest to the caller.
+     */
+    function test_Unstake_PaysTheYieldFeeOnTheGain() public {
         deal(mainnet.USDC, address(this), STAKE_AMOUNT);
         usdc.forceApprove(address(skyProtocol), STAKE_AMOUNT);
         skyProtocol.deposit(mainnet.USDC, STAKE_AMOUNT);
 
         vm.warp(block.timestamp + 365 days);
 
-        uint256 gross = skyProtocol.getBalance(mainnet.USDC);
-        assertGt(gross, STAKE_AMOUNT);
+        uint256 owed = skyProtocol.feeOwed(mainnet.USDC);
+        uint256 net = skyProtocol.getBalance(mainnet.USDC);
+        assertGt(net + owed, STAKE_AMOUNT, "earned over the year");
+        assertApproxEqAbs(owed, (net + owed - skyProtocol.principalOf(mainnet.USDC)) * 500 / 10_000, 1);
 
         IERC20(address(sUsds)).forceApprove(address(skyProtocol), type(uint256).max);
 
@@ -237,9 +242,8 @@ contract TestSkyV1ProtocolFork is Test {
 
         skyProtocol.withdraw(mainnet.USDC, type(uint256).max, address(this));
 
-        // Yield fee removed: nothing goes to the old fee recipient; the caller receives the full redeemed amount.
-        assertEq(usdc.balanceOf(feeRecipient), feeBefore, "no yield fee taken");
-        assertApproxEqAbs(usdc.balanceOf(address(this)) - usdcBefore, gross, STAKE_AMOUNT / 100);
+        assertEq(usdc.balanceOf(feeRecipient) - feeBefore, owed, "the fee collector gets the fee");
+        assertApproxEqAbs(usdc.balanceOf(address(this)) - usdcBefore, net, 2, "the caller gets the rest");
     }
 
     /// Shares are minted to the owner and the PSM pays the recipient: nothing passes through here.

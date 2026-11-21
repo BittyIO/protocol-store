@@ -2,7 +2,7 @@
 // TRON staking adapter: deploy it, register it with the guard, and drive it from a vault.
 //
 //   node stake.mjs probe    --network nile [--from T…]          simulate the staking opcodes; no key, no cost
-//   node stake.mjs deploy   --network nile [--register] [--dry-run]
+//   node stake.mjs deploy   --network nile [--guard T…] [--register] [--dry-run]
 //   node stake.mjs status   --network nile --vault T…
 //   node stake.mjs allow    --network nile --vault T…            only if the vault's own allow list is on
 //   node stake.mjs fund     --network nile --vault T… --trx 100  wrap TRX into WTRX and send it to the vault
@@ -60,6 +60,7 @@ const { positionals, values } = parseArgs({
     trx: { type: "string" },
     all: { type: "boolean", default: false },
     register: { type: "boolean", default: false },
+    guard: { type: "string" }, // the guard's address, until it is recorded below
     "dry-run": { type: "boolean", default: false },
     "no-build": { type: "boolean", default: false },
     from: { type: "string" },
@@ -80,6 +81,7 @@ const chain = new Chain({
 });
 
 function guardAddress() {
+  if (values.guard) return toEvm(values.guard);
   if (network.guard === "TODO") throw new Error(`${values.network}: the guard address is still TODO`);
   return toEvm(network.guard);
 }
