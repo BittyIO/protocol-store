@@ -5,7 +5,7 @@ import {IBittyV1Protocol} from "./IBittyV1Protocol.sol";
 
 /**
  * @title IBittyV1BridgeProtocol
- * @notice Moves an asset from the vault on this chain to the owner's vault on another chain.
+ * @notice Moves an asset from the vault on this chain to its counterpart vault on another chain.
  *         Stateless: the adapter holds nothing between calls. Each adapter states what it can enforce
  *         on this chain about where the money goes and what arrives.
  */
@@ -27,7 +27,8 @@ interface IBittyV1BridgeProtocol is IBittyV1Protocol {
      * @param token The asset to send, address(0) for the native coin.
      * @param amount What leaves the vault, fee included.
      * @param fee The Bitty fee, at most `amount * maxFeeBps / 10_000`.
-     * @param data The bridge-specific request (Across: abi.encode(AcrossBridgeProtocol.AcrossQuote)).
+     * @param data The bridge-specific request (Across: abi.encode(AcrossBridgeProtocol.AcrossQuote),
+     *        followed by the vault's creation owner to or from TRON).
      * @return received What the bridge is bound to pay out on the other side, in `token`'s units
      *         (rounded down). The vault charges `amount - received` to its daily loss allowance.
      */

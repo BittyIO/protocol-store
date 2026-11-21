@@ -11,7 +11,9 @@ import {
     BridgeValueMismatch,
     BridgeRouteUnknown,
     BridgeOutputTooLow,
-    BridgeDestinationUnsupported
+    BridgeDestinationUnsupported,
+    BridgeOriginOwnerNeeded,
+    BridgeOriginOwnerWrong
 } from "../../src/protocols/AcrossBridgeProtocol.sol";
 import {TestProxy} from "../helpers/Proxy.sol";
 
@@ -124,9 +126,14 @@ contract AcrossBridgeProtocolTest is Test {
         vm.deal(address(vault), 100 ether);
     }
 
+    /// The vault sits where the factory puts `owner`'s vault on every EVM chain, as a real one does.
     function _adapter(address tronFactory, bytes32 tronHash) internal returns (AcrossBridgeProtocol a) {
-        if (address(vault) == address(0)) vault = new StubVault(owner);
         AcrossBridgeProtocol impl = new AcrossBridgeProtocol(address(spoke), address(guard), tronFactory, tronHash);
+        if (address(vault) == address(0)) {
+            address at = impl.vaultOn(BASE, owner);
+            deployCodeTo("AcrossBridgeProtocol.t.sol:StubVault", abi.encode(owner), at);
+            vault = StubVault(payable(at));
+        }
         a = AcrossBridgeProtocol(payable(TestProxy.deploy(address(impl), address(vault))));
     }
 
@@ -135,17 +142,32 @@ contract AcrossBridgeProtocolTest is Test {
     }
 
     function _quote(uint256 chainId, address output, uint256 outputAmount) internal view returns (bytes memory) {
-        return abi.encode(
-            AcrossBridgeProtocol.AcrossQuote({
-                destinationChainId: chainId,
-                outputToken: output,
-                outputAmount: outputAmount,
-                exclusiveRelayer: address(0),
-                quoteTimestamp: uint32(block.timestamp),
-                fillDeadline: uint32(block.timestamp + 6 hours),
-                exclusivityParameter: 0
-            })
-        );
+        return abi.encode(_q(chainId, output, outputAmount));
+    }
+
+    /// The form a route to or from TRON takes: the quote and the vault's creation owner.
+    function _quote(uint256 chainId, address output, uint256 outputAmount, address originOwner)
+        internal
+        view
+        returns (bytes memory)
+    {
+        return abi.encode(_q(chainId, output, outputAmount), originOwner);
+    }
+
+    function _q(uint256 chainId, address output, uint256 outputAmount)
+        internal
+        view
+        returns (AcrossBridgeProtocol.AcrossQuote memory)
+    {
+        return AcrossBridgeProtocol.AcrossQuote({
+            destinationChainId: chainId,
+            outputToken: output,
+            outputAmount: outputAmount,
+            exclusiveRelayer: address(0),
+            quoteTimestamp: uint32(block.timestamp),
+            fillDeadline: uint32(block.timestamp + 6 hours),
+            exclusivityParameter: 0
+        });
     }
 
     function _bridge(AcrossBridgeProtocol a, address token, uint256 amount, uint256 fee, uint256 value, bytes memory q)
@@ -177,30 +199,82 @@ contract AcrossBridgeProtocolTest is Test {
         adapter.vaultOn(TRON, owner);
     }
 
-    function test_recipientIsTheOwnersVaultThere() public {
+    /// Between EVM chains the money arrives at this vault's own address there.
+    function test_recipientIsTheVaultItself() public {
         _bridge(adapter, address(usdc), 1_000e6, 0, 0, _quote(BASE, usdcOnBase, 999e6));
-        assertEq(spoke.recipient(), _b32(adapter.vaultOn(BASE, owner)));
+        assertEq(spoke.recipient(), _b32(address(vault)));
         assertEq(spoke.depositor(), _b32(address(vault)));
         assertEq(spoke.destinationChainId(), BASE);
     }
 
-    /// After an ownership transfer the money follows the NEW owner, not the old owner's address.
-    function test_recipientFollowsTheCurrentOwner() public {
+    /// A handover (a quantum-safe rotation) does not move the destination: it stays the vault's address.
+    function test_recipientStaysTheVaultAfterAHandover() public {
         address next = makeAddr("next");
         vm.prank(owner);
         vault.transferOwnership(next);
         _bridge(adapter, address(usdc), 1_000e6, 0, 0, _quote(BASE, usdcOnBase, 999e6));
-        assertEq(spoke.recipient(), _b32(adapter.vaultOn(BASE, next)));
-        assertTrue(spoke.recipient() != _b32(adapter.vaultOn(BASE, owner)));
+        assertEq(spoke.recipient(), _b32(address(vault)));
+        assertTrue(spoke.recipient() != _b32(adapter.vaultOn(BASE, next)));
     }
 
-    function test_toTronPaysTheTronVault() public {
-        AcrossBridgeProtocol a = _adapter(NILE_FACTORY, TRON_INITCODE_HASH);
+    /// Naming the creation owner between EVM chains changes nothing when it is right, and reverts when not.
+    function test_originOwnerBetweenEvmChains() public {
+        _bridge(adapter, address(usdc), 1_000e6, 0, 0, _quote(BASE, usdcOnBase, 999e6, owner));
+        assertEq(spoke.recipient(), _b32(address(vault)));
+
+        bytes memory wrong = _quote(BASE, usdcOnBase, 999e6, makeAddr("someoneElse"));
+        vm.expectRevert(BridgeOriginOwnerWrong.selector);
+        _bridge(adapter, address(usdc), 1_000e6, 0, 0, wrong);
+    }
+
+    /// The longer form with no owner in it is the short form.
+    function test_zeroOriginOwnerIsNone() public {
+        _bridge(adapter, address(usdc), 1_000e6, 0, 0, _quote(BASE, usdcOnBase, 999e6, address(0)));
+        assertEq(spoke.recipient(), _b32(address(vault)));
+    }
+
+    function test_recipientForIsWhatBridgePays() public view {
+        assertEq(adapter.recipientFor(address(vault), BASE, address(0)), address(vault));
+        assertEq(adapter.recipientFor(address(vault), 1, owner), address(vault));
+    }
+
+    function _toTron() internal returns (AcrossBridgeProtocol a, address usdtOnTron) {
+        a = _adapter(NILE_FACTORY, TRON_INITCODE_HASH);
         vault.approve(usdc, address(a));
-        address usdtOnTron = makeAddr("usdtOnTron");
+        usdtOnTron = makeAddr("usdtOnTron");
         guard.setUint(a.routeKey(address(usdc), TRON), a.packRoute(usdtOnTron, 6, 100));
-        _bridge(a, address(usdc), 1_000e6, 0, 0, _quote(TRON, usdtOnTron, 999e6));
+    }
+
+    /// TRON's vault is at another address: the creation owner's TRON vault, once this vault is proven theirs.
+    function test_toTronPaysTheCreationOwnersTronVault() public {
+        (AcrossBridgeProtocol a, address usdtOnTron) = _toTron();
+        _bridge(a, address(usdc), 1_000e6, 0, 0, _quote(TRON, usdtOnTron, 999e6, owner));
         assertEq(spoke.recipient(), _b32(a.vaultOn(TRON, owner)));
+        assertTrue(spoke.recipient() != _b32(address(vault)));
+    }
+
+    /// Still the creation owner's after a handover, not the new key's.
+    function test_toTronAfterAHandoverStillPaysTheCreationOwner() public {
+        (AcrossBridgeProtocol a, address usdtOnTron) = _toTron();
+        vm.prank(owner);
+        vault.transferOwnership(makeAddr("next"));
+        _bridge(a, address(usdc), 1_000e6, 0, 0, _quote(TRON, usdtOnTron, 999e6, owner));
+        assertEq(spoke.recipient(), _b32(a.vaultOn(TRON, owner)));
+    }
+
+    function test_toTronNeedsTheCreationOwner() public {
+        (AcrossBridgeProtocol a, address usdtOnTron) = _toTron();
+        bytes memory q = _quote(TRON, usdtOnTron, 999e6);
+        vm.expectRevert(BridgeOriginOwnerNeeded.selector);
+        _bridge(a, address(usdc), 1_000e6, 0, 0, q);
+    }
+
+    /// Any other owner's TRON vault is refused: this vault is not theirs.
+    function test_toTronRefusesAnotherOwner() public {
+        (AcrossBridgeProtocol a, address usdtOnTron) = _toTron();
+        bytes memory q = _quote(TRON, usdtOnTron, 999e6, NILE_OWNER);
+        vm.expectRevert(BridgeOriginOwnerWrong.selector);
+        _bridge(a, address(usdc), 1_000e6, 0, 0, q);
     }
 
     function test_sameChainIsRefused() public {
@@ -320,7 +394,7 @@ contract AcrossBridgeProtocolTest is Test {
 
     function test_identity() public view {
         assertEq(adapter.protocolLineage(), keccak256("bitty.adapter.across.bridge"));
-        assertEq(adapter.versionName(), "1.0.0");
+        assertEq(adapter.versionName(), "1.1.0");
         assertEq(adapter.maxFeeBps(), 20);
     }
 

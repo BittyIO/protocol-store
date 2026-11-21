@@ -8,7 +8,6 @@ import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Address} from "openzeppelin-contracts/contracts/utils/Address.sol";
-import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 
 error BridgeFeeTooHigh();
 error BridgeAmountZero();
@@ -16,6 +15,8 @@ error BridgeValueMismatch();
 error BridgeRouteUnknown();
 error BridgeOutputTooLow();
 error BridgeDestinationUnsupported();
+error BridgeOriginOwnerNeeded();
+error BridgeOriginOwnerWrong();
 
 /**
  * @dev Across's SpokePool, as far as a deposit goes. Addresses are bytes32 so non-EVM chains fit; an
@@ -47,20 +48,29 @@ interface IAcrossSpokePool {
  *         much of it as arguments to the deposit, so this adapter decides them rather than trusting
  *         the caller:
  *
- *         - The recipient is always the vault owner's own vault on the destination chain, computed
- *           here from the vault's CURRENT owner. Not the vault's own address: after an ownership
- *           transfer (the recovery from a stolen key) that address on another chain may still belong
- *           to the old key, while the current owner's vault there is theirs alone.
+ *         - The recipient is always this vault's own counterpart on the destination chain: between
+ *           EVM chains its own address, since every EVM vault is the factory's CREATE2 of its
+ *           creation owner and so sits at the same address on every EVM chain. To or from TRON the
+ *           address differs (another factory, another CREATE2 prefix), so the request names the
+ *           vault's creation owner, the adapter checks that this vault is that owner's vault here,
+ *           and pays that owner's vault there. Nothing the caller passes can name another address.
  *         - The route (this token to that chain) must be configured in the guard, which fixes the
  *           token that arrives, its decimals, and the most the bridge may cost.
  *         - What arrives must be at least what was sent less that cost, so a quote cannot hand the
  *           difference to a colluding relayer.
  *
- *         So a stolen owner key can move the vault's money only into the owner's own vaults on other
- *         chains, losing at most the route's cost on each crossing. {bridge} returns what arrives,
- *         and the vault charges the difference to its daily loss allowance, so repeated crossings
- *         lose at most that allowance a day. Those vaults keep their own locks and timelocks, so the
- *         owner's set of vaults is only as strong as its weakest member.
+ *         So a stolen owner key can move the vault's money only into this vault's counterparts on
+ *         other chains, losing at most the route's cost on each crossing. {bridge} returns what
+ *         arrives, and the vault charges the difference to its daily loss allowance, so repeated
+ *         crossings lose at most that allowance a day. Those vaults keep their own locks and
+ *         timelocks, so the set of vaults is only as strong as its weakest member.
+ *
+ *         The counterpart is whoever owns it THERE. Ownership is per chain: a vault handed to a new
+ *         key on this chain (a quantum-safe rotation, a sale, the recovery from a stolen key) is
+ *         still the old key's on any chain it was not also handed over on, and a bridge pays it all
+ *         the same. Until 1.1.0 the recipient was the current owner's own vault instead; that
+ *         followed a handover, but a vault whose key rotates bridged into a vault of the new key at
+ *         a new address, never the one its owner knows.
  *
  *         Bitty's fee is taken out of `amount` before the deposit, at most {MAX_FEE_BPS}, and sent to
  *         {FEE_RECIPIENT}. The vault is the depositor, so an unfilled deposit is refunded to it on
@@ -104,6 +114,8 @@ contract AcrossBridgeProtocol is IBittyV1BridgeProtocol, BittyV1ProtocolBase {
     uint256 public constant TRON_CHAIN_ID = 728126428;
 
     bytes32 private constant ROUTE_KEY = keccak256("bitty.bridge.across.route");
+    // abi.encode(AcrossQuote, address): seven static words and one more.
+    uint256 private constant QUOTE_WITH_ORIGIN_LENGTH = 8 * 32;
 
     address public immutable spokePool;
     address public immutable bittyGuard;
@@ -122,7 +134,7 @@ contract AcrossBridgeProtocol is IBittyV1BridgeProtocol, BittyV1ProtocolBase {
     }
 
     function protocolVersion() external pure override returns (uint256) {
-        return 1_000_000;
+        return 1_001_000;
     }
 
     function maxFeeBps() external pure override returns (uint256) {
@@ -144,7 +156,8 @@ contract AcrossBridgeProtocol is IBittyV1BridgeProtocol, BittyV1ProtocolBase {
     }
 
     /**
-     * @notice `owner`'s vault on `destinationChainId`, where a bridge from their vault pays out.
+     * @notice The vault that `owner` created (or will create) on `destinationChainId`: the factory's
+     *         CREATE2 of keccak256(owner) there.
      */
     function vaultOn(uint256 destinationChainId, address owner) public view returns (address) {
         bytes32 salt = keccak256(abi.encodePacked(owner));
@@ -156,8 +169,28 @@ contract AcrossBridgeProtocol is IBittyV1BridgeProtocol, BittyV1ProtocolBase {
     }
 
     /**
-     * @param data abi.encode(AcrossQuote), from Across's quote for this route, with the recipient set
-     *        to {vaultOn} for the vault's owner.
+     * @notice Where a bridge from `vault` to `destinationChainId` pays out: `vault` itself between
+     *         EVM chains, or, given the vault's creation owner `originOwner`, that owner's vault on
+     *         the destination after checking that `vault` is that owner's vault here.
+     * @dev `originOwner` is needed only to or from TRON (address(0) otherwise); a wrong one reverts.
+     */
+    function recipientFor(address vault, uint256 destinationChainId, address originOwner)
+        public
+        view
+        returns (address)
+    {
+        if (originOwner == address(0)) {
+            if ((destinationChainId == TRON_CHAIN_ID) != _onTron()) revert BridgeOriginOwnerNeeded();
+            return vault;
+        }
+        if (vaultOn(_onTron() ? TRON_CHAIN_ID : block.chainid, originOwner) != vault) revert BridgeOriginOwnerWrong();
+        return vaultOn(destinationChainId, originOwner);
+    }
+
+    /**
+     * @param data abi.encode(AcrossQuote) from Across's quote for this route, with the recipient set
+     *        to {recipientFor}; to or from TRON abi.encode(AcrossQuote, originOwner), the vault's
+     *        creation owner.
      */
     function bridge(address token, uint256 amount, uint256 fee, bytes calldata data)
         external
@@ -168,7 +201,10 @@ contract AcrossBridgeProtocol is IBittyV1BridgeProtocol, BittyV1ProtocolBase {
     {
         if (amount == 0) revert BridgeAmountZero();
         if (fee * 10_000 > amount * MAX_FEE_BPS) revert BridgeFeeTooHigh();
-        AcrossQuote memory q = abi.decode(data, (AcrossQuote));
+        AcrossQuote memory q;
+        address originOwner;
+        if (data.length == QUOTE_WITH_ORIGIN_LENGTH) (q, originOwner) = abi.decode(data, (AcrossQuote, address));
+        else q = abi.decode(data, (AcrossQuote));
         if (q.destinationChainId == block.chainid) revert BridgeDestinationUnsupported();
 
         bool native = token == address(0);
@@ -177,7 +213,7 @@ contract AcrossBridgeProtocol is IBittyV1BridgeProtocol, BittyV1ProtocolBase {
         received = _checkOutput(inputToken, native ? 18 : IERC20Metadata(token).decimals(), deposit, q);
 
         address vault = msg.sender;
-        address recipient = vaultOn(q.destinationChainId, Ownable(vault).owner());
+        address recipient = recipientFor(vault, q.destinationChainId, originOwner);
         if (native) {
             if (msg.value != amount) revert BridgeValueMismatch();
             if (fee != 0) Address.sendValue(payable(FEE_RECIPIENT), fee);
@@ -191,6 +227,13 @@ contract AcrossBridgeProtocol is IBittyV1BridgeProtocol, BittyV1ProtocolBase {
             if (IERC20(token).allowance(address(this), spokePool) != 0) IERC20(token).forceApprove(spokePool, 0);
         }
         emit Bridged(token, amount, fee, data);
+    }
+
+    /**
+     * @dev Whether this deployment runs on TRON, where vault addresses come from the TRON factory.
+     */
+    function _onTron() internal pure virtual returns (bool) {
+        return false;
     }
 
     /**
