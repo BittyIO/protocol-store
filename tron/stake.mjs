@@ -47,7 +47,7 @@ const NETWORKS = {
     fullHost: "https://api.trongrid.io",
     chainId: 728126428,
     wtrx: "TNUC9Qb1rRpS5CbWLmNMxXBjyFoydXjWFR",
-    guard: "TODO", // the guard repo's tron/deploy.mjs has not run on mainnet yet
+    guard: "0xf022C72D48c2E3B81731dbA6649BF780302c0035", // TXrvqX2YMe7N7Muiaxuu2Fs1smTB4sSR3n, deployed 2026-11-22
     feeLimitTrx: 1_000,
   },
 };
@@ -55,6 +55,7 @@ const NETWORKS = {
 const { positionals, values } = parseArgs({
   allowPositionals: true,
   options: {
+    rpc: { type: "string" }, // a node URL instead of the network's fullHost (e.g. Alchemy's, key in the path)
     network: { type: "string", default: "nile" },
     vault: { type: "string" },
     trx: { type: "string" },
@@ -73,7 +74,7 @@ const statePath = join(repo, "deployments", `tron-${values.network}.json`);
 const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : {};
 
 const chain = new Chain({
-  fullHost: network.fullHost,
+  fullHost: values.rpc || network.fullHost,
   privateKey: process.env.TRON_PRIVATE_KEY,
   apiKey: process.env.TRON_PRO_API_KEY,
   feeLimitTrx: network.feeLimitTrx,
@@ -134,7 +135,7 @@ async function probe() {
   const ops = artifact("TronStakeOps.yul", "TronStakeOps").bytecode;
   const probeCode = artifact("TronStakeProbe.sol", "TronStakeProbe").bytecode;
   const data = probeCode + AbiCoder.defaultAbiCoder().encode(["bytes", "address"], [ops, from]).slice(2);
-  const res = await fetch(`${network.fullHost}/wallet/triggerconstantcontract`, {
+  const res = await fetch(`${chain.fullHost.replace(/\/$/, "")}/wallet/triggerconstantcontract`, {
     method: "POST",
     headers: { "content-type": "application/json", ...chain.headers },
     body: JSON.stringify({ owner_address: toTronHex(from), contract_address: "", data: data.slice(2), call_value: 2_000_000 }),

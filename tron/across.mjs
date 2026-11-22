@@ -48,7 +48,7 @@ const NETWORKS = {
     spokePool: "TTbCVPfUZmPhrB9sYC8GKgGBQQEdZovkmS",
     wtrx: "TNUC9Qb1rRpS5CbWLmNMxXBjyFoydXjWFR",
     usdt: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-    guard: "TODO", // the guard repo's tron/deploy.mjs has not run on mainnet yet
+    guard: "0xf022C72D48c2E3B81731dbA6649BF780302c0035", // TXrvqX2YMe7N7Muiaxuu2Fs1smTB4sSR3n, deployed 2026-11-22
     feeRecipient: "TODO", // pass --fee-recipient: mainnet's fee collector is not decided
     // The TRON vault factory and its proxy init-code hash: the adapter checks a vault is the factory's
     // CREATE2 of the creation owner a bridge names. Nile's hash is 0x5218…4fbd; mainnet's factory
@@ -69,6 +69,7 @@ const NETWORKS = {
 const { positionals, values } = parseArgs({
   allowPositionals: true,
   options: {
+    rpc: { type: "string" }, // a node URL instead of the network's fullHost (e.g. Alchemy's, key in the path)
     network: { type: "string", default: "mainnet" },
     "fee-recipient": { type: "string" },
     register: { type: "boolean", default: false },
@@ -87,7 +88,7 @@ const statePath = join(repo, "deployments", `tron-${values.network}.json`);
 const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : {};
 
 const chain = new Chain({
-  fullHost: network.fullHost,
+  fullHost: values.rpc || network.fullHost,
   privateKey: process.env.TRON_PRIVATE_KEY,
   apiKey: process.env.TRON_PRO_API_KEY,
   feeLimitTrx: network.feeLimitTrx,

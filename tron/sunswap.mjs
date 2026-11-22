@@ -57,7 +57,7 @@ const NETWORKS = {
     router: "TQqgNg13s2DjvXhW1ky4v6TsR8wZGvb7Y4",
     permit2: "TTJxU3P8rHycAyFY4kVtGNfmnMH4ezcuM9",
     v2Factory: "TKWJdrQkqHisa1X8HUdHEfREvTzw4pMAaY",
-    guard: "TODO", // the guard repo's tron/deploy.mjs has not run on mainnet yet
+    guard: "0xf022C72D48c2E3B81731dbA6649BF780302c0035", // TXrvqX2YMe7N7Muiaxuu2Fs1smTB4sSR3n, deployed 2026-11-22
     feeRecipient: "TODO", // pass --fee-recipient: mainnet's fee collector is not decided
     feeLimitTrx: 1_000,
   },
@@ -66,6 +66,7 @@ const NETWORKS = {
 const { positionals, values } = parseArgs({
   allowPositionals: true,
   options: {
+    rpc: { type: "string" }, // a node URL instead of the network's fullHost (e.g. Alchemy's, key in the path)
     network: { type: "string", default: "nile" },
     trx: { type: "string", default: "10" },
     "fee-recipient": { type: "string" },
@@ -85,7 +86,7 @@ const statePath = join(repo, "deployments", `tron-${values.network}.json`);
 const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : {};
 
 const chain = new Chain({
-  fullHost: network.fullHost,
+  fullHost: values.rpc || network.fullHost,
   privateKey: process.env.TRON_PRIVATE_KEY,
   apiKey: process.env.TRON_PRO_API_KEY,
   feeLimitTrx: network.feeLimitTrx,
@@ -147,7 +148,7 @@ async function probe() {
     ["address", "address", "address", "address", "address"],
     [router, permit2, wtrx, usdt, feeTo],
   );
-  const res = await fetch(`${network.fullHost}/wallet/triggerconstantcontract`, {
+  const res = await fetch(`${chain.fullHost.replace(/\/$/, "")}/wallet/triggerconstantcontract`, {
     method: "POST",
     headers: { "content-type": "application/json", ...chain.headers },
     body: JSON.stringify({
@@ -202,7 +203,7 @@ async function route() {
     ["address", "address", "address", "bytes"],
     [toEvm(impl), configured("wtrx"), tokenOut, values.route],
   );
-  const res = await fetch(`${network.fullHost}/wallet/triggerconstantcontract`, {
+  const res = await fetch(`${chain.fullHost.replace(/\/$/, "")}/wallet/triggerconstantcontract`, {
     method: "POST",
     headers: { "content-type": "application/json", ...chain.headers },
     body: JSON.stringify({
