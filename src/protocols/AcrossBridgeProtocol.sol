@@ -73,7 +73,7 @@ interface IAcrossSpokePool {
  *         a new address, never the one its owner knows.
  *
  *         Bitty's fee is taken out of `amount` before the deposit, at most {MAX_FEE_BPS}, and sent to
- *         {FEE_RECIPIENT}. The vault is the depositor, so an unfilled deposit is refunded to it on
+ *         {feeRecipient}. The vault is the depositor, so an unfilled deposit is refunded to it on
  *         this chain after its fill deadline. No allowance to the SpokePool outlives the call.
  *
  * @dev The vault's address on every EVM chain comes from the same factory and init code (salt =
@@ -133,12 +133,26 @@ contract AcrossBridgeProtocol is IBittyV1BridgeProtocol, BittyV1ProtocolBase {
         return keccak256("bitty.adapter.across.bridge");
     }
 
+    /**
+     * @dev 1.1.1: the same bridge, deployed with TRON's vault factory and init-code hash on the chains
+     *      Across serves to and from TRON. The version moves so the deploy script replaces the 1.1.0
+     *      builds (deployed without them, TRON unreachable) instead of reusing them.
+     */
     function protocolVersion() external pure override returns (uint256) {
-        return 1_001_000;
+        return 1_001_001;
     }
 
     function maxFeeBps() external pure override returns (uint256) {
         return MAX_FEE_BPS;
+    }
+
+    /**
+     * @notice Where Bitty's fee goes.
+     * @dev Virtual so a deployment on a chain without the fee Safe's vault (TRON) can name its own
+     *      recipient; everywhere else it is {FEE_RECIPIENT}.
+     */
+    function feeRecipient() public view virtual returns (address) {
+        return FEE_RECIPIENT;
     }
 
     /**
@@ -210,18 +224,18 @@ contract AcrossBridgeProtocol is IBittyV1BridgeProtocol, BittyV1ProtocolBase {
         bool native = token == address(0);
         address inputToken = native ? IAcrossSpokePool(spokePool).wrappedNativeToken() : token;
         uint256 deposit = amount - fee;
-        received = _checkOutput(inputToken, native ? 18 : IERC20Metadata(token).decimals(), deposit, q);
+        received = _checkOutput(inputToken, native ? _nativeDecimals() : IERC20Metadata(token).decimals(), deposit, q);
 
         address vault = msg.sender;
         address recipient = recipientFor(vault, q.destinationChainId, originOwner);
         if (native) {
             if (msg.value != amount) revert BridgeValueMismatch();
-            if (fee != 0) Address.sendValue(payable(FEE_RECIPIENT), fee);
+            if (fee != 0) Address.sendValue(payable(feeRecipient()), fee);
             _deposit(vault, recipient, inputToken, deposit, deposit, q);
         } else {
             if (msg.value != 0) revert BridgeValueMismatch();
             IERC20(token).safeTransferFrom(vault, address(this), amount);
-            if (fee != 0) IERC20(token).safeTransfer(FEE_RECIPIENT, fee);
+            if (fee != 0) _transferToken(token, feeRecipient(), fee);
             IERC20(token).forceApprove(spokePool, deposit);
             _deposit(vault, recipient, inputToken, deposit, 0, q);
             if (IERC20(token).allowance(address(this), spokePool) != 0) IERC20(token).forceApprove(spokePool, 0);
@@ -230,10 +244,25 @@ contract AcrossBridgeProtocol is IBittyV1BridgeProtocol, BittyV1ProtocolBase {
     }
 
     /**
+     * @dev The only token the adapter sends out of its own balance is the fee. Virtual for TRON,
+     *      whose USDT `transfer` reports false on success and so fails {SafeERC20-safeTransfer}.
+     */
+    function _transferToken(address token, address to, uint256 amount) internal virtual {
+        IERC20(token).safeTransfer(to, amount);
+    }
+
+    /**
      * @dev Whether this deployment runs on TRON, where vault addresses come from the TRON factory.
      */
     function _onTron() internal pure virtual returns (bool) {
         return false;
+    }
+
+    /**
+     * @dev The native coin's decimals: 18 on every EVM chain, virtual for TRON's 6.
+     */
+    function _nativeDecimals() internal pure virtual returns (uint8) {
+        return 18;
     }
 
     /**

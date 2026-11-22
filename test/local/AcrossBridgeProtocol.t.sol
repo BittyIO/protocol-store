@@ -394,7 +394,7 @@ contract AcrossBridgeProtocolTest is Test {
 
     function test_identity() public view {
         assertEq(adapter.protocolLineage(), keccak256("bitty.adapter.across.bridge"));
-        assertEq(adapter.versionName(), "1.1.0");
+        assertEq(adapter.versionName(), "1.1.1");
         assertEq(adapter.maxFeeBps(), 20);
     }
 

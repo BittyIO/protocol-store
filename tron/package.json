@@ -1,0 +1,13 @@
+{
+  "name": "bitty-protocol-store-tron",
+  "private": true,
+  "type": "module",
+  "description": "Deploys protocol-store's TRON adapters (forge cannot broadcast to TRON) and drives them from a vault on testnet.",
+  "scripts": {
+    "stake": "node stake.mjs"
+  },
+  "dependencies": {
+    "ethers": "6.13.4",
+    "tronweb": "6.5.1"
+  }
+}
