@@ -17,7 +17,7 @@ contract ForkRouteGuard {
 /**
  * Against Across's real SpokePool on Sepolia, bridging to Base Sepolia (the routes Across's testnet
  * carries): the deposit is accepted, and the event Across's relayers fill from names the vault as
- * depositor and the owner's vault on Base Sepolia as recipient.
+ * depositor and the vault's own address on Base Sepolia as recipient.
  *
  * This test contract plays the vault: it owns the adapter and answers owner().
  */
@@ -73,7 +73,7 @@ contract TestAcrossBridgeProtocolSepoliaFork is Test {
             assertEq(input, bytes32(uint256(uint160(inputToken))));
             assertEq(inAmt, inputAmount);
             assertEq(outAmt, outputAmount);
-            assertEq(recipient, bytes32(uint256(uint160(adapter.vaultOn(BASE_SEPOLIA, owner)))), "recipient");
+            assertEq(recipient, bytes32(uint256(uint160(address(this)))), "recipient = the vault");
             assertEq(message.length, 0);
             seen = true;
         }
