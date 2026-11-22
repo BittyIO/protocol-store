@@ -60,6 +60,14 @@ contract UniswapUniversalTradeProtocol is IBittyV1MarketTradeProtocol, BittyV1Pr
         return 1_000_001; // 1.0.1: fee to the fee Safe's vault
     }
 
+    /**
+     * @dev Where the 0.2% fee goes. Virtual so a deployment on a chain without the fee Safe's vault
+     *      (TRON) can name its own recipient; everywhere else it is {FEE_RECIPIENT}.
+     */
+    function feeRecipient() public view virtual returns (address) {
+        return FEE_RECIPIENT;
+    }
+
     receive() external payable {}
 
     function swap(bytes memory data, address recipient) external payable override onlyOwner {
@@ -71,7 +79,7 @@ contract UniswapUniversalTradeProtocol is IBittyV1MarketTradeProtocol, BittyV1Pr
         if (_isStablecoin(tokenIn)) {
             uint256 fee = amountIn * SWAP_FEE_BPS / 10_000;
             if (fee > 0) {
-                _payFrom(tokenIn, FEE_RECIPIENT, fee);
+                _payFrom(tokenIn, feeRecipient(), fee);
                 swapAmountIn = amountIn - fee;
             }
         } else {
@@ -87,7 +95,7 @@ contract UniswapUniversalTradeProtocol is IBittyV1MarketTradeProtocol, BittyV1Pr
         uint256 payout = amountOut;
         if (feeFromOutput) {
             uint256 fee = amountOut * SWAP_FEE_BPS / 10_000;
-            if (fee > 0) _pay(tokenOut, FEE_RECIPIENT, fee);
+            if (fee > 0) _pay(tokenOut, feeRecipient(), fee);
             payout = amountOut - fee;
         }
         if (payout < amountOutMinimum) revert InsufficientOutput();
@@ -113,7 +121,7 @@ contract UniswapUniversalTradeProtocol is IBittyV1MarketTradeProtocol, BittyV1Pr
         uint256 received = _balanceOf(tokenOut) - outBefore;
 
         uint256 fee = amountInSpent * SWAP_FEE_BPS / 10_000;
-        if (fee > 0) _pay(tokenIn, FEE_RECIPIENT, fee);
+        if (fee > 0) _pay(tokenIn, feeRecipient(), fee);
 
         if (received < amountOut) revert InsufficientOutput();
         _pay(tokenOut, recipient, received);
@@ -166,7 +174,7 @@ contract UniswapUniversalTradeProtocol is IBittyV1MarketTradeProtocol, BittyV1Pr
         if (token == address(0)) {
             Address.sendValue(payable(to), amount);
         } else {
-            IERC20(token).safeTransfer(to, amount);
+            _transferToken(token, to, amount);
         }
     }
 
@@ -181,7 +189,15 @@ contract UniswapUniversalTradeProtocol is IBittyV1MarketTradeProtocol, BittyV1Pr
     function _refundIn(address token) private {
         if (token == address(0)) return; // native handled by _refundNative
         uint256 left = IERC20(token).balanceOf(address(this));
-        if (left > 0) IERC20(token).safeTransfer(msg.sender, left);
+        if (left > 0) _transferToken(token, msg.sender, left);
+    }
+
+    /**
+     * @dev Every token the adapter sends out of its own balance goes through here. Virtual for TRON,
+     *      whose USDT `transfer` reports false on success and so fails {SafeERC20-safeTransfer}.
+     */
+    function _transferToken(address token, address to, uint256 amount) internal virtual {
+        IERC20(token).safeTransfer(to, amount);
     }
 
     function _refundNative() private {
