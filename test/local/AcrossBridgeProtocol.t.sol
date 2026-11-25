@@ -13,8 +13,11 @@ import {
     BridgeOutputTooLow,
     BridgeDestinationUnsupported,
     BridgeOriginOwnerNeeded,
-    BridgeOriginOwnerWrong
+    BridgeOriginOwnerWrong,
+    BridgeRecipientInvalid,
+    BridgeDestinationMismatch
 } from "../../src/protocols/AcrossBridgeProtocol.sol";
+import {IBittyV1BridgeProtocol} from "../../src/interfaces/IBittyV1BridgeProtocol.sol";
 import {TestProxy} from "../helpers/Proxy.sol";
 
 /// Across's SpokePool as far as a deposit goes: take the tokens (or the value) and remember the call.
@@ -394,7 +397,7 @@ contract AcrossBridgeProtocolTest is Test {
 
     function test_identity() public view {
         assertEq(adapter.protocolLineage(), keccak256("bitty.adapter.across.bridge"));
-        assertEq(adapter.versionName(), "1.1.1");
+        assertEq(adapter.versionName(), "1.2.2");
         assertEq(adapter.maxFeeBps(), 20);
     }
 
@@ -423,5 +426,147 @@ contract AcrossBridgeProtocolTest is Test {
         address eighteen = makeAddr("eighteen");
         _route(address(six), BASE, eighteen, 18, 100);
         assertEq(_received(address(six), 1_000e6, 0, _quote(BASE, eighteen, 995.0000009e18)), 995e6);
+    }
+
+    // ── to someone else's address ───────────────────────────────────────────────────────────────
+
+    address payee = makeAddr("payee");
+    // A TRON address as Across carries it: its 20 bytes, the 0x41 prefix dropped.
+    address constant TRON_PAYEE = 0xa614f803B6FD780986A42c78Ec9c7f77e6DeD13C;
+
+    function _bridgeTo(address token, uint256 amount, uint256 fee, address to, bytes memory q)
+        internal
+        returns (uint256)
+    {
+        uint256 chainId = abi.decode(q, (AcrossBridgeProtocol.AcrossQuote)).destinationChainId;
+        vm.prank(address(vault));
+        return adapter.bridgeTo(token, amount, fee, chainId, _b32(to), q);
+    }
+
+    function test_bridgeTo_paysTheNamedRecipient() public {
+        bytes memory q = _quote(BASE, usdcOnBase, 990e6);
+        vm.expectEmit(address(adapter));
+        emit IBittyV1BridgeProtocol.BridgedTo(address(usdc), BASE, _b32(payee), 1_000e6, 2e6, q);
+        assertEq(_bridgeTo(address(usdc), 1_000e6, 2e6, payee, q), 990e6);
+        assertEq(spoke.recipient(), _b32(payee));
+        assertEq(spoke.depositor(), _b32(address(vault)));
+        assertEq(spoke.inputAmount(), 998e6);
+        assertEq(usdc.balanceOf(feeRecipient), 2e6);
+        assertEq(usdc.balanceOf(address(adapter)), 0);
+        assertEq(usdc.allowance(address(adapter), address(spoke)), 0);
+    }
+
+    /// To TRON it pays the address named, not the owner's TRON vault, and needs no origin owner.
+    function test_bridgeTo_aTronAddress() public {
+        _route(address(usdc), TRON, makeAddr("usdtOnTron"), 6, 100);
+        _bridgeTo(address(usdc), 1_000e6, 0, TRON_PAYEE, _quote(TRON, makeAddr("usdtOnTron"), 995e6));
+        assertEq(spoke.recipient(), _b32(TRON_PAYEE));
+        assertEq(spoke.destinationChainId(), TRON);
+    }
+
+    function test_bridgeTo_holdsTheRoute() public {
+        vm.expectRevert(BridgeRouteUnknown.selector);
+        _bridgeTo(address(usdc), 1_000e6, 0, payee, _quote(BASE, makeAddr("other"), 999e6));
+        vm.expectRevert(BridgeOutputTooLow.selector);
+        _bridgeTo(address(usdc), 1_000e6, 0, payee, _quote(BASE, usdcOnBase, 989e6));
+        vm.expectRevert(BridgeDestinationUnsupported.selector);
+        _bridgeTo(address(usdc), 1_000e6, 0, payee, _quote(block.chainid, usdcOnBase, 999e6));
+    }
+
+    function test_bridgeTo_refusals() public {
+        bytes memory q = _quote(BASE, usdcOnBase, 999e6);
+        vm.expectRevert(BridgeRecipientInvalid.selector);
+        _bridgeTo(address(usdc), 1_000e6, 0, address(0), q);
+        vm.expectRevert(BridgeRecipientInvalid.selector); // the vault's counterpart goes through bridge
+        _bridgeTo(address(usdc), 1_000e6, 0, address(vault), q);
+        vm.expectRevert(BridgeAmountZero.selector);
+        _bridgeTo(address(usdc), 0, 0, payee, q);
+        vm.expectRevert(BridgeFeeTooHigh.selector);
+        _bridgeTo(address(usdc), 1_000e6, 2e6 + 1, payee, q);
+        vm.expectRevert(BridgeValueMismatch.selector); // no native coin
+        _bridgeTo(address(0), 1 ether, 0, payee, _quote(BASE, wethOnBase, 0.99 ether));
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, owner));
+        adapter.bridgeTo(address(usdc), 1_000e6, 0, BASE, _b32(payee), q);
+    }
+
+    /// A Solana address goes to Across whole, all 32 bytes.
+    function test_bridgeTo_aSolanaAddress() public {
+        uint256 solana = 34268394551451;
+        bytes32 to = 0xc6fa7af3bedbad3a3d65f36aabc97431b1bbe4c2d2f6e0e47ca60203452f5d61;
+        _route(address(usdc), solana, makeAddr("usdcOnSolana"), 6, 100);
+        bytes memory q = _quote(solana, makeAddr("usdcOnSolana"), 995e6);
+        vm.prank(address(vault));
+        adapter.bridgeTo(address(usdc), 1_000e6, 0, solana, to, q);
+        assertEq(spoke.recipient(), to);
+        assertEq(spoke.destinationChainId(), solana);
+    }
+
+    /// The vault names the chain; a quote for another one cannot move the payment there.
+    function test_bridgeTo_quoteMustBeForTheNamedChain() public {
+        _route(address(usdc), TRON, makeAddr("usdtOnTron"), 6, 100);
+        bytes memory q = _quote(TRON, makeAddr("usdtOnTron"), 995e6);
+        vm.prank(address(vault));
+        vm.expectRevert(BridgeDestinationMismatch.selector);
+        adapter.bridgeTo(address(usdc), 1_000e6, 0, BASE, _b32(payee), q);
+    }
+
+    // ── a flat cost on top ──────────────────────────────────────────────────────────────────────
+
+    address usdtOnTron = makeAddr("usdtOnTron");
+
+    /// Into TRON Across keeps ~6.2 USDT a transfer: with 3% and no flat cost, 10 USDT cannot go.
+    function test_smallTransferNeedsAFlatCost() public {
+        _route(address(usdc), TRON, usdtOnTron, 6, 300);
+        bytes memory q = _quote(TRON, usdtOnTron, 3.8e6);
+        vm.expectRevert(BridgeOutputTooLow.selector);
+        _bridgeTo(address(usdc), 10e6, 0, payee, q);
+
+        guard.setUint(adapter.routeKey(address(usdc), TRON), adapter.packRoute(usdtOnTron, 6, 300, 8e6));
+        assertEq(_bridgeTo(address(usdc), 10e6, 0, payee, q), 3.8e6);
+    }
+
+    /// The floor is the share and the flat cost together, and no lower.
+    function test_flatCostIsOnTopOfTheShare() public {
+        guard.setUint(adapter.routeKey(address(usdc), TRON), adapter.packRoute(usdtOnTron, 6, 300, 8e6));
+        // 100 USDT: at most 3 + 8 = 11 kept, so 89 must arrive.
+        _bridgeTo(address(usdc), 100e6, 0, payee, _quote(TRON, usdtOnTron, 89e6));
+        vm.expectRevert(BridgeOutputTooLow.selector);
+        _bridgeTo(address(usdc), 100e6, 0, payee, _quote(TRON, usdtOnTron, 89e6 - 1));
+    }
+
+    /// A transfer smaller than the flat cost floors at zero, and zero itself never passes.
+    function test_flatCostLargerThanTheTransfer() public {
+        guard.setUint(adapter.routeKey(address(usdc), TRON), adapter.packRoute(usdtOnTron, 6, 300, 8e6));
+        _bridgeTo(address(usdc), 5e6, 0, payee, _quote(TRON, usdtOnTron, 1));
+        vm.expectRevert(BridgeOutputTooLow.selector);
+        _bridgeTo(address(usdc), 5e6, 0, payee, _quote(TRON, usdtOnTron, 0));
+    }
+
+    /// The flat cost is capped at ten whole output tokens, whatever the guard says.
+    function test_flatCostIsCapped() public {
+        guard.setUint(adapter.routeKey(address(usdc), TRON), adapter.packRoute(usdtOnTron, 6, 0, 1_000e6));
+        _bridgeTo(address(usdc), 100e6, 0, payee, _quote(TRON, usdtOnTron, 90e6));
+        vm.expectRevert(BridgeOutputTooLow.selector);
+        _bridgeTo(address(usdc), 100e6, 0, payee, _quote(TRON, usdtOnTron, 90e6 - 1));
+    }
+
+    /// The flat cost counts in the OUTPUT token's units: BNB Chain's 18-decimal USDT into TRON's 6.
+    function test_flatCostAcrossDecimals() public {
+        MockERC20 usdt18 = new MockERC20("Tether", "USDT", 18);
+        usdt18.mint(address(vault), 1_000e18);
+        vault.approve(usdt18, address(adapter));
+        guard.setUint(adapter.routeKey(address(usdt18), TRON), adapter.packRoute(usdtOnTron, 6, 300, 8e6));
+        assertEq(_bridgeTo(address(usdt18), 10e18, 0, payee, _quote(TRON, usdtOnTron, 3.8e6)), 3.8e18);
+    }
+
+    /// A flat cost reaches {bridge} too: 10 USDT to the owner's own TRON vault.
+    function test_flatCostOnABridgeToTheOwnTronVault() public {
+        AcrossBridgeProtocol a = _adapter(NILE_FACTORY, TRON_INITCODE_HASH);
+        vault.approve(usdc, address(a));
+        guard.setUint(a.routeKey(address(usdc), TRON), a.packRoute(usdtOnTron, 6, 300, 8e6));
+        vm.prank(address(vault));
+        assertEq(a.bridge(address(usdc), 10e6, 0, _quote(TRON, usdtOnTron, 3.8e6, owner)), 3.8e6);
     }
 }

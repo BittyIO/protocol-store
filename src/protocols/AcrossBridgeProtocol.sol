@@ -17,6 +17,8 @@ error BridgeOutputTooLow();
 error BridgeDestinationUnsupported();
 error BridgeOriginOwnerNeeded();
 error BridgeOriginOwnerWrong();
+error BridgeRecipientInvalid();
+error BridgeDestinationMismatch();
 
 /**
  * @dev Across's SpokePool, as far as a deposit goes. Addresses are bytes32 so non-EVM chains fit; an
@@ -53,14 +55,17 @@ interface IAcrossSpokePool {
  *           creation owner and so sits at the same address on every EVM chain. To or from TRON the
  *           address differs (another factory, another CREATE2 prefix), so the request names the
  *           vault's creation owner, the adapter checks that this vault is that owner's vault here,
- *           and pays that owner's vault there. Nothing the caller passes can name another address.
+ *           and pays that owner's vault there. Nothing passed to {bridge} can name another address;
+ *           {bridgeTo} names one on purpose, and the vault meters it as a send.
  *         - The route (this token to that chain) must be configured in the guard, which fixes the
  *           token that arrives, its decimals, and the most the bridge may cost.
- *         - What arrives must be at least what was sent less that cost, so a quote cannot hand the
- *           difference to a colluding relayer.
+ *         - What arrives must be at least what was sent less that cost (a share of it, and on a
+ *           route whose bridge charges per transfer, a flat amount besides), so a quote cannot hand
+ *           the difference to a colluding relayer.
  *
- *         So a stolen owner key can move the vault's money only into this vault's counterparts on
- *         other chains, losing at most the route's cost on each crossing. {bridge} returns what
+ *         So through {bridge} a stolen owner key can move the vault's money only into this vault's
+ *         counterparts on other chains, losing at most the route's cost on each crossing; through
+ *         {bridgeTo}, at most the vault's send allowance a day, as with a send. {bridge} returns what
  *         arrives, and the vault charges the difference to its daily loss allowance, so repeated
  *         crossings lose at most that allowance a day. Those vaults keep their own locks and
  *         timelocks, so the set of vaults is only as strong as its weakest member.
@@ -107,6 +112,9 @@ contract AcrossBridgeProtocol is IBittyV1BridgeProtocol, BittyV1ProtocolBase {
     address public constant FEE_RECIPIENT = 0xF0E7f6998B362BD15CF819C7EBfcaCe8865FECA0;
     uint256 public constant MAX_FEE_BPS = 20; // 0.2%
     uint256 public constant MAX_COST_BPS = 300; // 3%, the most any route may let the bridge keep
+    // The most flat cost any route may let the bridge keep on top, in whole output tokens: room for
+    // a fee Across charges per transfer, not per amount (into TRON, ~6.2 USDT however much is sent).
+    uint256 public constant MAX_FLAT_COST_TOKENS = 10;
 
     address public constant EVM_VAULT_FACTORY = 0x3d7Ed3cD011B423dd11BE280BF926667CAf0F120;
     bytes32 public constant EVM_VAULT_INITCODE_HASH =
@@ -134,12 +142,17 @@ contract AcrossBridgeProtocol is IBittyV1BridgeProtocol, BittyV1ProtocolBase {
     }
 
     /**
-     * @dev 1.1.1: the same bridge, deployed with TRON's vault factory and init-code hash on the chains
-     *      Across serves to and from TRON. The version moves so the deploy script replaces the 1.1.0
-     *      builds (deployed without them, TRON unreachable) instead of reusing them.
+     * @dev 1.2.2: a route may allow a flat cost on top of its basis points, so a transfer small
+     *      against a per-transfer fee (into TRON) can go; 1.2.1 refused anything under ~207 USDT.
+     *      1.2.1: {bridgeTo} names the destination chain, which the quote must match, and takes the
+     *      recipient as 32 bytes so a Solana address fits; the vault pays whitelisted recipients on
+     *      other chains through it. 1.2.0 (0xA56bE4f4225C66B02A29c7D4E7E76a7BDaA31631) had neither.
+     *      1.2.0: {bridgeTo}, a bridge to someone else's address, which the vault meters as a send.
+     *      1.1.1: the same bridge, deployed with TRON's vault factory and init-code hash on the
+     *      chains Across serves to and from TRON.
      */
     function protocolVersion() external pure override returns (uint256) {
-        return 1_001_001;
+        return 1_002_002;
     }
 
     function maxFeeBps() external pure override returns (uint256) {
@@ -159,14 +172,26 @@ contract AcrossBridgeProtocol is IBittyV1BridgeProtocol, BittyV1ProtocolBase {
      * @notice The guard config key of the route from `inputToken` (the wrapped native token for the
      *         native coin) on this chain to `destinationChainId`.
      * @dev Its value packs the route: bits 0-159 the output token, 160-167 its decimals, 168-183 the
-     *      most the bridge may cost in basis points (capped at {MAX_COST_BPS}). 0 means no route.
+     *      most the bridge may cost in basis points (capped at {MAX_COST_BPS}), 184-247 a flat cost
+     *      it may keep on top, in the output token's smallest units (capped at
+     *      {MAX_FLAT_COST_TOKENS} whole tokens). 0 means no route. Adapters before 1.2.2 read no
+     *      flat cost, so adding one to a route changes nothing for them.
      */
     function routeKey(address inputToken, uint256 destinationChainId) public pure returns (bytes32) {
         return keccak256(abi.encode(ROUTE_KEY, inputToken, destinationChainId));
     }
 
     function packRoute(address outputToken, uint8 outputDecimals, uint16 maxCostBps) external pure returns (uint256) {
-        return uint256(uint160(outputToken)) | (uint256(outputDecimals) << 160) | (uint256(maxCostBps) << 168);
+        return packRoute(outputToken, outputDecimals, maxCostBps, 0);
+    }
+
+    function packRoute(address outputToken, uint8 outputDecimals, uint16 maxCostBps, uint64 maxFlatCost)
+        public
+        pure
+        returns (uint256)
+    {
+        return uint256(uint160(outputToken)) | (uint256(outputDecimals) << 160) | (uint256(maxCostBps) << 168)
+            | (uint256(maxFlatCost) << 184);
     }
 
     /**
@@ -231,16 +256,70 @@ contract AcrossBridgeProtocol is IBittyV1BridgeProtocol, BittyV1ProtocolBase {
         if (native) {
             if (msg.value != amount) revert BridgeValueMismatch();
             if (fee != 0) Address.sendValue(payable(feeRecipient()), fee);
-            _deposit(vault, recipient, inputToken, deposit, deposit, q);
+            _deposit(vault, _b32(recipient), inputToken, deposit, deposit, q);
         } else {
             if (msg.value != 0) revert BridgeValueMismatch();
-            IERC20(token).safeTransferFrom(vault, address(this), amount);
-            if (fee != 0) _transferToken(token, feeRecipient(), fee);
-            IERC20(token).forceApprove(spokePool, deposit);
-            _deposit(vault, recipient, inputToken, deposit, 0, q);
-            if (IERC20(token).allowance(address(this), spokePool) != 0) IERC20(token).forceApprove(spokePool, 0);
+            _depositToken(vault, _b32(recipient), token, amount, fee, q);
         }
         emit Bridged(token, amount, fee, data);
+    }
+
+    /**
+     * @notice Bridge `amount` of `token` to `recipient` on the quote's chain: someone else's
+     *         address, which the vault meters against its send allowance. See
+     *         {IBittyV1BridgeProtocol-bridgeTo}.
+     * @dev The route and the floor on what arrives are held as for {bridge}, so a quote still
+     *      cannot hand the difference to a colluding relayer; only the recipient is the caller's,
+     *      and the chain, which the quote must match: the vault decides who may be paid where (a
+     *      whitelisted recipient is bound to its chain), so a quote cannot move the payment.
+     *      An ERC-20 only. `recipient` may not be the vault: its counterpart goes through {bridge},
+     *      and on TRON the same 20 bytes are not even the counterpart.
+     * @param destinationChainId The chain the vault means to pay on; the quote must be for it.
+     * @param recipient Who is paid there, as 32 bytes, the way Across takes it: a 20-byte address
+     *        (EVM, or TRON without its 0x41 prefix) left-padded, a Solana address in full.
+     * @param data abi.encode(AcrossQuote) from Across's quote for this route, with this recipient.
+     */
+    function bridgeTo(
+        address token,
+        uint256 amount,
+        uint256 fee,
+        uint256 destinationChainId,
+        bytes32 recipient,
+        bytes calldata data
+    ) external override onlyOwner returns (uint256 received) {
+        if (amount == 0) revert BridgeAmountZero();
+        if (fee * 10_000 > amount * MAX_FEE_BPS) revert BridgeFeeTooHigh();
+        if (token == address(0)) revert BridgeValueMismatch();
+        address vault = msg.sender;
+        if (recipient == 0 || recipient == _b32(vault)) revert BridgeRecipientInvalid();
+        AcrossQuote memory q = abi.decode(data, (AcrossQuote));
+        if (q.destinationChainId != destinationChainId) revert BridgeDestinationMismatch();
+        if (q.destinationChainId == block.chainid) revert BridgeDestinationUnsupported();
+
+        uint256 deposit = amount - fee;
+        received = _checkOutput(token, IERC20Metadata(token).decimals(), deposit, q);
+        _depositToken(vault, recipient, token, amount, fee, q);
+        emit BridgedTo(token, destinationChainId, recipient, amount, fee, data);
+    }
+
+    /**
+     * @dev Pulls `amount` from the vault, sends `fee` to Bitty, and deposits the rest for
+     *      `recipient`. No allowance to the SpokePool outlives the call.
+     */
+    function _depositToken(
+        address vault,
+        bytes32 recipient,
+        address token,
+        uint256 amount,
+        uint256 fee,
+        AcrossQuote memory q
+    ) private {
+        uint256 deposit = amount - fee;
+        IERC20(token).safeTransferFrom(vault, address(this), amount);
+        if (fee != 0) _transferToken(token, feeRecipient(), fee);
+        IERC20(token).forceApprove(spokePool, deposit);
+        _deposit(vault, recipient, token, deposit, 0, q);
+        if (IERC20(token).allowance(address(this), spokePool) != 0) IERC20(token).forceApprove(spokePool, 0);
     }
 
     /**
@@ -278,6 +357,9 @@ contract AcrossBridgeProtocol is IBittyV1BridgeProtocol, BittyV1ProtocolBase {
         uint8 outputDecimals = uint8(route >> 160);
         uint256 maxCost = uint16(route >> 168);
         if (maxCost > MAX_COST_BPS) maxCost = MAX_COST_BPS;
+        uint256 flat = uint64(route >> 184);
+        uint256 maxFlat = MAX_FLAT_COST_TOKENS * 10 ** outputDecimals;
+        if (flat > maxFlat) flat = maxFlat;
 
         uint256 least = deposit * (10_000 - maxCost) / 10_000;
         if (outputDecimals >= inputDecimals) {
@@ -289,12 +371,13 @@ contract AcrossBridgeProtocol is IBittyV1BridgeProtocol, BittyV1ProtocolBase {
             least /= scale;
             received = q.outputAmount * scale;
         }
+        least = least > flat ? least - flat : 0;
         if (q.outputAmount < least || q.outputAmount == 0) revert BridgeOutputTooLow();
     }
 
     function _deposit(
         address vault,
-        address recipient,
+        bytes32 recipient,
         address inputToken,
         uint256 inputAmount,
         uint256 value,
@@ -302,7 +385,7 @@ contract AcrossBridgeProtocol is IBittyV1BridgeProtocol, BittyV1ProtocolBase {
     ) private {
         IAcrossSpokePool(spokePool).deposit{value: value}(
             _b32(vault),
-            _b32(recipient),
+            recipient,
             _b32(inputToken),
             _b32(q.outputToken),
             inputAmount,

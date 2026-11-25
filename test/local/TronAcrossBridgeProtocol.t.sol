@@ -196,7 +196,7 @@ contract TronAcrossBridgeProtocolTest is Test {
         assertEq(adapter.bittyGuard(), address(guard));
         assertEq(adapter.tronVaultFactory(), NILE_FACTORY);
         assertEq(adapter.protocolLineage(), keccak256("bitty.adapter.across.bridge"));
-        assertEq(adapter.protocolVersion(), 1_001_001);
+        assertEq(adapter.protocolVersion(), 1_002_002);
         assertEq(adapter.maxFeeBps(), 20);
     }
 }
